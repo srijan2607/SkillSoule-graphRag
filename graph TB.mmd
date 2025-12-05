@@ -1,0 +1,151 @@
+graph TB
+    subgraph "Frontend Layer - React SPA"
+        UI[React Application<br/>Vite Dev Server<br/>Port 5173]
+        
+        subgraph "UI Components"
+            LOGIN[Login/Register Pages]
+            UPLOAD[CSV Upload Interface]
+            CHAT[Chat Interface]
+            MONITOR[Monitoring Dashboard]
+        end
+        
+        UI --> LOGIN
+        UI --> UPLOAD
+        UI --> CHAT
+        UI --> MONITOR
+    end
+    
+    subgraph "API Layer - FastAPI"
+        FASTAPI[FastAPI Application<br/>Uvicorn Server<br/>Port 8000]
+        
+        subgraph "Middleware Stack"
+            CORS[CORS Middleware<br/>localhost:5173, 3000]
+            RATELIMIT[SlowAPI Rate Limiter<br/>10 requests/minute]
+            JWTAUTH[JWT Auth Middleware]
+            ERRORHANDLER[Error Handlers]
+        end
+        
+        subgraph "API Routers"
+            AUTHAPI["/api/auth/*<br/>Login, Register"]
+            INGESTAPI["/api/ingest/*<br/>CSV Upload, Status"]
+            QUERYAPI["/api/query/*<br/>NL Query Processing"]
+            ADMINAPI["/api/admin/*<br/>Admin Operations"]
+            MONITORAPI["/api/monitor/*<br/>WebSocket Monitoring"]
+        end
+        
+        FASTAPI --> CORS
+        CORS --> RATELIMIT
+        RATELIMIT --> JWTAUTH
+        JWTAUTH --> ERRORHANDLER
+        ERRORHANDLER --> AUTHAPI
+        ERRORHANDLER --> INGESTAPI
+        ERRORHANDLER --> QUERYAPI
+        ERRORHANDLER --> ADMINAPI
+        ERRORHANDLER --> MONITORAPI
+    end
+    
+    subgraph "Service Layer"
+        subgraph "Core Services"
+            LANGGRAPH[LangGraph Service<br/>Workflow Orchestration]
+            INGEST_SVC[Ingestion Service<br/>Batch Processing]
+            AUTH_SVC[Auth Service<br/>JWT + bcrypt]
+        end
+        
+        subgraph "AI Services"
+            EMBEDDING[Embedding Service<br/>all-MiniLM-L6-v2<br/>384 dimensions]
+            OPENROUTER[OpenRouter Service<br/>LLM API Client<br/>Circuit Breaker]
+            INTENT[Intent Analysis<br/>Multi-layer Classification]
+            ENTITY[Entity Extraction<br/>Graph-informed Matching]
+        end
+        
+        subgraph "Graph Services"
+            SKILL_GRAPH[Skill Graph Service<br/>Node + Relationship Creation]
+            JOB_GRAPH[Job Graph Service<br/>Node + Relationship Creation]
+            VECTOR_IDX[Vector Index Service<br/>HNSW Index Management]
+            SIMILARITY[Skill Similarity Service<br/>Cosine Similarity Top-K]
+        end
+    end
+    
+    subgraph "Repository Layer"
+        NEO4J_REPO[Neo4j Repository<br/>Cypher Queries]
+        USER_REPO[User Repository<br/>Prisma Queries]
+        QUERY_REPO[Query History Repository]
+        INGEST_REPO[Ingestion Repository]
+    end
+    
+    subgraph "Data Layer"
+        subgraph "Neo4j Knowledge Graph"
+            NEO4J[(Neo4j Cloud<br/>Knowledge Graph<br/>+ Vector Indexes)]
+            
+            NODES[Nodes:<br/>Job, Skill, Company<br/>Location, Category]
+            RELS[Relationships:<br/>REQUIRES, SIMILAR_TO<br/>POSTED_BY, BELONGS_TO]
+            VIDX[Vector Indexes:<br/>skill_embedding_idx<br/>job_embedding_idx<br/>company_embedding_idx]
+            
+            NEO4J --> NODES
+            NEO4J --> RELS
+            NEO4J --> VIDX
+        end
+        
+        subgraph "PostgreSQL Database"
+            POSTGRES[(PostgreSQL Cloud<br/>Relational Data)]
+            
+            TABLES[Tables:<br/>users, ingestion_jobs<br/>query_history, orphan_skill_logs<br/>neo4j_query_logs]
+            
+            POSTGRES --> TABLES
+        end
+    end
+    
+    subgraph "External Services"
+        OPENROUTER_API[OpenRouter API<br/>meta-llama/llama-3.3-8b]
+        HF_API[HuggingFace API<br/>Embedding Model]
+    end
+    
+    subgraph "Background Jobs"
+        SCHEDULER[APScheduler<br/>File Cleanup<br/>Every 15 minutes]
+    end
+    
+    %% Frontend to API connections
+    UI -->|HTTP + JWT| FASTAPI
+    
+    %% API to Services
+    QUERYAPI --> LANGGRAPH
+    INGESTAPI --> INGEST_SVC
+    AUTHAPI --> AUTH_SVC
+    
+    %% Service to Service connections
+    LANGGRAPH --> EMBEDDING
+    LANGGRAPH --> OPENROUTER
+    LANGGRAPH --> INTENT
+    LANGGRAPH --> ENTITY
+    
+    INGEST_SVC --> EMBEDDING
+    INGEST_SVC --> SKILL_GRAPH
+    INGEST_SVC --> JOB_GRAPH
+    INGEST_SVC --> VECTOR_IDX
+    INGEST_SVC --> SIMILARITY
+    
+    %% Services to Repositories
+    LANGGRAPH --> NEO4J_REPO
+    LANGGRAPH --> QUERY_REPO
+    INGEST_SVC --> NEO4J_REPO
+    INGEST_SVC --> INGEST_REPO
+    AUTH_SVC --> USER_REPO
+    
+    %% Repositories to Databases
+    NEO4J_REPO --> NEO4J
+    USER_REPO --> POSTGRES
+    QUERY_REPO --> POSTGRES
+    INGEST_REPO --> POSTGRES
+    
+    %% External API connections
+    OPENROUTER --> OPENROUTER_API
+    EMBEDDING --> HF_API
+    
+    %% Background Jobs
+    SCHEDULER -.->|Cleanup| FASTAPI
+    
+    style FASTAPI fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
+    style NEO4J fill:#00A86B,stroke:#006B45,stroke-width:3px,color:#fff
+    style POSTGRES fill:#336791,stroke:#1E3A5F,stroke-width:3px,color:#fff
+    style LANGGRAPH fill:#FF6B6B,stroke:#C23B3B,stroke-width:3px,color:#fff
+    style OPENROUTER fill:#9B59B6,stroke:#6C3483,stroke-width:3px,color:#fff

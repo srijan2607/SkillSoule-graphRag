@@ -1,0 +1,51 @@
+[tool.poetry]
+name = "graph-rag-backend"
+version = "1.0.0"
+description = "Knowledge Graph RAG System for Skills & Jobs"
+authors = ["Your Team <team@example.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.109.0"
+uvicorn = {extras = ["standard"], version = "^0.27.0"}
+pydantic = "^2.5.3"
+pydantic-settings = "^2.1.0"
+langgraph = "^0.0.60"
+langchain = "^0.1.0"
+prisma = "^0.11.0"
+neo4j = "^5.15.0"
+transformers = "^4.36.0"
+sentence-transformers = "^2.2.2"
+torch = "^2.1.0"
+python-jose = {extras = ["cryptography"], version = "^3.3.0"}
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+httpx = "^0.26.0"
+pandas = "^2.1.4"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.3"
+pytest-asyncio = "^0.21.1"
+pytest-cov = "^4.1.0"
+black = "^23.12.1"
+ruff = "^0.1.9"
+mypy = "^1.8.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 100
+target-version = ['py311']
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]

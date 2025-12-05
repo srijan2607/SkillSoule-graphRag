@@ -1,0 +1,121 @@
+# Quality Gate Decision
+# Story: 3.5 Job-Skill Relationships with Fuzzy Matching
+# Reviewed: 2025-10-24
+
+schema: 1
+story: "3.5"
+story_title: "Job-Skill Relationships with Fuzzy Matching"
+gate: PASS
+status_reason: "All 14 acceptance criteria met with comprehensive test coverage (20 tests: 13 unit + 7 integration). Implementation follows 3-tier matching strategy with excellent code quality, proper error handling, and intelligent deduplication. Production-ready."
+reviewer: "Quinn (Test Architect)"
+updated: "2025-10-24T14:30:00Z"
+
+waiver: { active: false }
+
+top_issues: []
+
+risk_summary:
+  totals: { critical: 0, high: 0, medium: 0, low: 1 }
+  recommendations:
+    must_fix: []
+    monitor:
+      - "Fuzzy matching performance with 10K+ skills in cache (currently O(n), acceptable for MVP but may need BK-tree optimization)"
+      - "Orphan review workflow - ensure admins regularly review pending orphans to prevent taxonomy drift"
+
+evidence:
+  tests_reviewed: 20
+  risks_identified: 0
+  trace:
+    ac_covered: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+    ac_gaps: []
+
+nfr_validation:
+  security:
+    status: PASS
+    notes: "Internal service with no user input processing - all data from trusted CSV. Parameterized queries prevent injection attacks."
+  performance:
+    status: PASS
+    notes: "O(1) exact match, O(n) fuzzy match where n=cache size. Acceptable for 5000 skills. Batch processing 1000 relationships/transaction. Skill cache loaded once per job."
+  reliability:
+    status: PASS
+    notes: "Excellent error handling with transaction safety, graceful degradation (individual failures don't stop batch), MERGE prevents duplicate orphans, comprehensive logging."
+  maintainability:
+    status: PASS
+    notes: "Clean architecture following Story 3.4 patterns, comprehensive type hints and docstrings, 20 tests enable confident refactoring, clear 3-tier strategy."
+
+quality_score: 100
+# Calculation: 100 - (0 × concerns) = 100
+
+recommendations:
+  immediate: []
+  future:
+    - action: "Update story documentation to reflect actual test count (20 tests, not 22)"
+      refs: ["docs/stories/3.5.story.md:Test Coverage section"]
+      rationale: "Story claims 9 integration tests, but 7 exist. Minor documentation accuracy issue."
+    - action: "Consider BK-tree or similar fuzzy search structure for 10K+ skills"
+      refs: ["app/services/skill_matching_service.py:122-165"]
+      rationale: "Current O(n) Levenshtein approach acceptable for MVP (5K skills) but may need optimization at scale. Monitor fuzzy match latency."
+    - action: "Create admin dashboard metrics for orphan review velocity"
+      refs: ["app/services/skill_matching_service.py:232-249"]
+      rationale: "Track orphan creation rate vs review rate to prevent backlog buildup and taxonomy drift."
+
+# Technical Details
+implementation_highlights:
+  - "3-tier matching strategy: Exact (O(1)) → Fuzzy (O(n), distance ≤ 2) → Orphan (manual review)"
+  - "Confidence scoring: 1.0 (exact), 0.9 (distance 1), 0.8 (distance 2), 0.0 (orphan)"
+  - "Skill cache loaded once per ingestion job, not per skill (performance optimization)"
+  - "MERGE prevents duplicate orphan creation on re-ingestion"
+  - "Ambiguous fuzzy matches (multiple candidates) create orphan with suggestions"
+  - "OrphanSkillLog table in PostgreSQL for admin review workflow"
+  - "Batch processing: 1000 relationships per Neo4j transaction"
+  - "Supports both JSON array and comma-separated skill lists"
+  - "Similarity_scores aligned with standardized_skills by index"
+  - "Admin review dashboard query with job count sorting"
+  - "Comprehensive logging with emoji indicators (✅, 🔍, ⚠️)"
+
+test_coverage_details:
+  unit_tests:
+    - "Exact matching: 2 tests (case-insensitive, whitespace handling)"
+    - "Fuzzy matching: 3 tests (distance 1, distance 2, threshold exceeded)"
+    - "Orphan creation: 3 tests (no match, too short, ambiguous)"
+    - "Confidence calculation: 2 tests (distance 1 = 0.9, distance 2 = 0.8)"
+    - "Cache management: 2 tests (refresh once, manual refresh)"
+    - "Deduplication: 1 test (MERGE prevents duplicates)"
+  integration_tests:
+    - "End-to-end exact match workflow (3 skills)"
+    - "Fuzzy match with typo correction (Pyton → Python)"
+    - "Orphan creation and PostgreSQL logging"
+    - "Ambiguous match creates orphan with candidates"
+    - "Admin review dashboard query (sorted by usage)"
+    - "Batch processing 2000 relationships (2 batches of 1000)"
+    - "Similarity scores alignment with skills"
+
+traceability_matrix:
+  AC_1_exact_match:
+    tests: ["test_exact_match_case_insensitive", "test_exact_match_with_whitespace", "test_job_skill_relationship_creation_exact_matches"]
+  AC_2_fuzzy_match:
+    tests: ["test_fuzzy_match_typo_correction_distance_1", "test_fuzzy_match_typo_correction_distance_2", "test_fuzzy_match_threshold_exceeded", "test_job_skill_relationship_with_fuzzy_match"]
+  AC_3_orphan_creation:
+    tests: ["test_orphan_creation_no_match", "test_orphan_creation_skill_name_too_short", "test_orphan_creation_and_logging"]
+  AC_4_ambiguous_match:
+    tests: ["test_ambiguous_fuzzy_match_creates_orphan (unit)", "test_ambiguous_fuzzy_match_creates_orphan (integration)"]
+  AC_5_confidence_scoring:
+    tests: ["test_confidence_calculation_distance_1", "test_confidence_calculation_distance_2"]
+  AC_6_cache_optimization:
+    tests: ["test_skill_cache_refreshed_once", "test_manual_cache_refresh"]
+  AC_7_deduplication:
+    tests: ["test_deduplication_prevents_duplicates"]
+  AC_8_orphan_logging:
+    tests: ["test_orphan_creation_and_logging", "test_ambiguous_fuzzy_match_creates_orphan"]
+  AC_9_admin_dashboard:
+    tests: ["test_admin_review_dashboard_query"]
+  AC_10_batch_processing:
+    tests: ["test_batch_processing_1000_relationships"]
+  AC_11_field_parsing:
+    tests: ["test_job_skill_relationship_creation_exact_matches (validates comma-separated)"]
+  AC_12_scores_alignment:
+    tests: ["test_similarity_scores_alignment"]
+  AC_13_requires_relationships:
+    tests: ["test_job_skill_relationship_creation_exact_matches", "test_job_skill_relationship_with_fuzzy_match"]
+  AC_14_statistics:
+    tests: ["All integration tests verify stats dictionary"]

@@ -1,0 +1,80 @@
+# Quality Gate Decision
+# Story 5.6: End-to-End Integration Testing
+
+schema: 1
+story: "5.6"
+story_title: "End-to-End Integration Testing"
+gate: CONCERNS
+status_reason: "Comprehensive test infrastructure delivered with excellent documentation and full AC coverage. Test brittleness from generic selectors and hardcoded timeouts present medium risk to long-term maintainability."
+reviewer: "Quinn (Test Architect)"
+updated: "2025-10-25T23:45:00Z"
+
+waiver: { active: false }
+
+top_issues:
+  - id: "TEST-001"
+    severity: medium
+    finding: "Tests rely on generic CSS selectors without data-testid attributes, creating brittleness if UI changes"
+    suggested_action: "Add data-testid attributes to key UI components (inputs, buttons, messages) for stable test selectors"
+  - id: "TEST-002"
+    severity: medium
+    finding: "Multiple tests use hardcoded waitForTimeout() instead of intelligent waiting strategies"
+    suggested_action: "Replace waitForTimeout with Playwright's auto-waiting features or explicit waitForSelector/waitForURL"
+  - id: "TEST-003"
+    severity: low
+    finding: "Hardcoded test credentials (test@example.com) without fixture management system"
+    suggested_action: "Implement test data fixtures for user management in future iterations"
+
+risk_summary:
+  totals: { critical: 0, high: 0, medium: 2, low: 3 }
+  highest: 6
+  recommendations:
+    must_fix: []
+    monitor:
+      - "Test brittleness (Risk Score: 6) - Address in next sprint to prevent maintenance burden"
+      - "Hardcoded waits causing potential flakiness (Risk Score: 4)"
+
+quality_score: 80
+expires: "2025-11-08T23:45:00Z"
+
+evidence:
+  tests_reviewed: 20
+  risks_identified: 5
+  trace:
+    ac_covered: [1, 2, 3, 4, 5, 6, 7]
+    ac_gaps: []
+
+nfr_validation:
+  security:
+    status: PASS
+    notes: "Tests validate error messages don't expose sensitive data or stack traces. Good validation of graceful error handling."
+  performance:
+    status: PASS
+    notes: "Response time tracking implemented (<10s assertion). Acceptable for MVP without load testing."
+  reliability:
+    status: PASS
+    notes: "Error recovery and API failure scenarios well tested. Network resilience validated."
+  maintainability:
+    status: PASS
+    notes: "Excellent documentation (318-line checklist + 395-line README). Clear test structure and organization."
+
+recommendations:
+  immediate:
+    - action: "Add data-testid attributes to UI components for test stability"
+      refs:
+        - "frontend/src/components/auth/LoginForm.tsx"
+        - "frontend/src/components/auth/RegisterForm.tsx"
+        - "frontend/src/components/chat/ChatContainer.tsx"
+        - "frontend/src/components/chat/MessageInput.tsx"
+    - action: "Replace waitForTimeout with intelligent waiting"
+      refs:
+        - "frontend/src/test/e2e/query-flow.spec.js:158-159"
+        - "frontend/src/test/e2e/multi-turn-conversation.spec.js:59,82,134,160,172,202,227,252"
+        - "frontend/src/test/e2e/error-handling.spec.js:62,146,260,295,310"
+  future:
+    - action: "Implement CI/CD integration for automated test execution"
+      refs: ["docs/testing/README.md:247-272"]
+    - action: "Create test fixture management system for user credentials and test data"
+      refs: ["frontend/src/test/e2e/"]
+    - action: "Reduce network timeout test duration from 35s to more reasonable time"
+      refs: ["frontend/src/test/e2e/error-handling.spec.js:230"]

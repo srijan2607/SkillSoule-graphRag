@@ -1,0 +1,124 @@
+generator client {
+  provider  = "prisma-client-py"
+  interface = "asyncio"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  password_hash String
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  query_history  QueryHistory[]
+  ingestion_jobs IngestionJob[]
+
+  @@map("users")
+}
+
+model IngestionJob {
+  id                String   @id @default(uuid())
+  user_id           String
+  file_type         String // "skills" or "jobs"
+  file_name         String
+  file_size_mb      Float
+  status            String // "pending", "processing", "completed", "failed", "completed_with_errors"
+  total_records     Int      @default(0)
+  processed_records Int      @default(0)
+  failed_records    Int      @default(0)
+  batch_number               Int?
+  processing_speed           Float? // Average records per second (Story 2.5)
+  estimated_completion_time  DateTime? // ETA timestamp (Story 2.5)
+  error_log                  String?
+  started_at        DateTime?
+  completed_at      DateTime?
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  user   User               @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  errors IngestionError[]
+
+  @@index([user_id])
+  @@index([status])
+  @@index([file_type])
+  @@map("ingestion_jobs")
+}
+
+model IngestionError {
+  id             String   @id @default(uuid())
+  job_id         String
+  row_number     Int // 1-indexed CSV row number
+  error_message  String   @db.Text
+  raw_data       String   @db.Text // JSON string of the failed row data
+  created_at     DateTime @default(now())
+
+  ingestion_job IngestionJob @relation(fields: [job_id], references: [id], onDelete: Cascade)
+
+  @@index([job_id])
+  @@index([created_at])
+  @@map("ingestion_errors")
+}
+
+model QueryHistory {
+  id            String   @id @default(uuid())
+  user_id       String
+  session_id    String? // Session identifier for conversation grouping
+  query_text    String
+  response_text String
+  metadata      String // JSON string
+  created_at    DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([session_id])
+  @@index([created_at])
+  @@map("query_history")
+}
+
+model OrphanSkillLog {
+  id               String    @id @default(uuid())
+  skill_id         String // Neo4j Skill node ID
+  skill_name       String
+  job_id           String // Job that referenced this skill
+  orphan_reason    String // "no_match", "ambiguous_fuzzy_match", "too_short"
+  fuzzy_candidates Json? // List of potential matches (if ambiguous)
+  status           String    @default("pending_review") // "pending_review", "approved", "merged"
+  created_at       DateTime  @default(now())
+  reviewed_at      DateTime?
+  reviewed_by      String?
+
+  @@index([status])
+  @@index([created_at])
+  @@map("orphan_skill_logs")
+}
+
+model Neo4jQueryLog {
+  id                String   @id @default(uuid())
+  query_text        String   @db.Text // Full Cypher query
+  parameters        Json? // Query parameters (JSON)
+  operation_type    String // "READ", "WRITE", "VECTOR_SEARCH", "GRAPH_TRAVERSAL"
+  execution_time_ms Float // Query execution time in milliseconds
+  result_count      Int? // Number of records returned
+  status            String // "success", "error"
+  error_message     String? @db.Text // Error details if failed
+  user_id           String? // Optional user context
+  session_id        String? // Session identifier for grouping
+  source            String? // Source of query (e.g., "ingestion", "query_pipeline", "vector_search")
+  metadata          Json? // Additional metadata (node types, relationship types, etc.)
+  created_at        DateTime @default(now())
+
+  @@index([operation_type])
+  @@index([status])
+  @@index([created_at])
+  @@index([execution_time_ms])
+  @@index([user_id])
+  @@index([session_id])
+  @@index([source])
+  @@map("neo4j_query_logs")
+}
