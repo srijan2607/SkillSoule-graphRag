@@ -1,4 +1,18 @@
-"""Pytest configuration and fixtures for testing."""
+"""Pytest configuration and fixtures for testing.
+
+Provides fixtures for:
+- Prisma (PostgreSQL) test database
+- Neo4j test database
+- Test authentication
+- FastAPI test client
+
+Custom markers:
+- @pytest.mark.integration: Integration tests requiring real databases
+- @pytest.mark.e2e: End-to-end tests for complete workflows
+- @pytest.mark.benchmark: Performance benchmark tests
+
+Reference: Network Math Implementation - Phase 5 (05-TESTING-STRATEGY.md)
+"""
 
 import pytest
 import asyncio
@@ -7,6 +21,102 @@ from prisma import Prisma
 from app.repositories.neo4j_repository import Neo4jRepository
 from app.repositories.ingestion_repository import IngestionRepository
 from app.config import settings
+
+
+# =============================================================================
+# PYTEST CONFIGURATION
+# =============================================================================
+
+def pytest_configure(config):
+    """Configure custom pytest markers."""
+    config.addinivalue_line(
+        "markers",
+        "integration: mark test as integration test (requires real databases)"
+    )
+    config.addinivalue_line(
+        "markers",
+        "e2e: mark test as end-to-end test (tests complete workflows)"
+    )
+    config.addinivalue_line(
+        "markers",
+        "benchmark: mark test as performance benchmark"
+    )
+    config.addinivalue_line(
+        "markers",
+        "slow: mark test as slow (>5 seconds)"
+    )
+
+
+def pytest_addoption(parser):
+    """Add custom CLI options for test selection."""
+    parser.addoption(
+        "--run-integration",
+        action="store_true",
+        default=False,
+        help="Run integration tests (requires database connections)"
+    )
+    parser.addoption(
+        "--run-e2e",
+        action="store_true",
+        default=False,
+        help="Run end-to-end tests"
+    )
+    parser.addoption(
+        "--run-benchmark",
+        action="store_true",
+        default=False,
+        help="Run performance benchmark tests"
+    )
+    parser.addoption(
+        "--run-slow",
+        action="store_true",
+        default=False,
+        help="Run slow tests"
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip marked tests unless explicitly requested."""
+    # Skip integration tests unless --run-integration is passed
+    if not config.getoption("--run-integration"):
+        skip_integration = pytest.mark.skip(
+            reason="Need --run-integration option to run integration tests"
+        )
+        for item in items:
+            if "integration" in item.keywords:
+                item.add_marker(skip_integration)
+
+    # Skip e2e tests unless --run-e2e is passed
+    if not config.getoption("--run-e2e"):
+        skip_e2e = pytest.mark.skip(
+            reason="Need --run-e2e option to run end-to-end tests"
+        )
+        for item in items:
+            if "e2e" in item.keywords:
+                item.add_marker(skip_e2e)
+
+    # Skip benchmark tests unless --run-benchmark is passed
+    if not config.getoption("--run-benchmark"):
+        skip_benchmark = pytest.mark.skip(
+            reason="Need --run-benchmark option to run benchmark tests"
+        )
+        for item in items:
+            if "benchmark" in item.keywords:
+                item.add_marker(skip_benchmark)
+
+    # Skip slow tests unless --run-slow is passed
+    if not config.getoption("--run-slow"):
+        skip_slow = pytest.mark.skip(
+            reason="Need --run-slow option to run slow tests"
+        )
+        for item in items:
+            if "slow" in item.keywords:
+                item.add_marker(skip_slow)
+
+
+# =============================================================================
+# EVENT LOOP FIXTURE
+# =============================================================================
 
 
 @pytest.fixture(scope="session")

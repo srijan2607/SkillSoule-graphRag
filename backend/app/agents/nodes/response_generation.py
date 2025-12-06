@@ -48,6 +48,28 @@ Provide 3-5 actionable insights based on the data:
 - "Discovered [N] similar skill relationships"
 - "Traversed [N] career progression paths"
 
+### 3.5. TRANSITION ANALYSIS (For transition_path queries)
+**When the user asks about career transitions (e.g., "How do I transition from X to Y?"):**
+- Include the **Transition Index** score (percentage showing transition feasibility)
+- Show **Skill Closeness** metric (how transferable current skills are)
+- List **Skills to Develop** (gap between current and target skills)
+- Mention **CO_OCCURS_WITH relationships** (skills that frequently appear together)
+- Provide a **Learning Path** recommendation based on skill proximity
+- Use emojis for transition assessments: 🟢 (easy), 🟡 (moderate), 🔴 (challenging)
+
+Example for transition queries:
+"Based on our graph analysis, transitioning from **Backend Developer to ML Engineer** has a **Transition Index of 62%** 🟡 (moderate effort).
+
+**Your Transferable Skills:**
+- Python (directly applicable)
+- SQL (useful for data work)
+- API development (helpful for ML deployment)
+
+**Skills to Develop:**
+📚 Machine Learning fundamentals → TensorFlow/PyTorch → Deep Learning → MLOps
+
+Our graph found 24 CO_OCCURS_WITH relationships showing Python and TensorFlow frequently appear together in ML roles."
+
 ### 4. SUPPORTING DATA
 Include specific examples or numbers to back up your insights:
 - "Most positions (85%) require Python"

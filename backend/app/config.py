@@ -72,6 +72,17 @@ class Settings(BaseSettings):
     GRAPH_CYPHER_LIMIT: int = 500  # LIMIT clause in Cypher queries
     GRAPH_ENABLE_DEEP_TRAVERSAL: bool = True  # Enable comprehensive graph exploration
 
+    # Network Metrics Configuration (for CO_OCCURS_WITH relationships)
+    NETWORK_MIN_CO_OCCURRENCE: int = 2  # Minimum jobs for edge creation
+    NETWORK_DIJKSTRA_TIMEOUT: float = 5.0  # Dijkstra query timeout (seconds)
+    NETWORK_CACHE_TTL: int = 3600  # Centrality cache TTL (seconds)
+    NETWORK_BATCH_SIZE: int = 1000  # Batch size for co-occurrence build
+
+    # GDS Configuration (if using Neo4j Graph Data Science)
+    GDS_PROJECTION_NAME: str = "skillNetwork"
+    GDS_EIGENVECTOR_ITERATIONS: int = 100
+    GDS_EIGENVECTOR_TOLERANCE: float = 1e-7
+
     # CORS (comma-separated string in .env, parsed to list)
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
 
