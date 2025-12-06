@@ -142,3 +142,109 @@ class ErrorResponse(BaseModel):
     error: str = Field(..., description="Error message")
     detail: Optional[str] = Field(None, description="Detailed error information")
     skill_id: Optional[str] = Field(None, description="Related skill ID if applicable")
+
+
+# =============================================================================
+# NEW NETWORK API MODELS (Phase 6)
+# =============================================================================
+
+class SkillDetail(BaseModel):
+    """Detail about a skill in path."""
+    id: str = Field(..., description="Skill ID")
+    name: str = Field(..., description="Skill name")
+    category: Optional[str] = Field(None, description="Skill category")
+
+
+class PathResponse(BaseModel):
+    """Response for shortest path endpoint (/api/network/path)."""
+    total_cost: float = Field(..., description="Sum of edge costs along path")
+    closeness: float = Field(..., ge=0.0, le=1.0, description="1 / (1 + total_cost)")
+    path_skill_names: List[str] = Field(default_factory=list, description="Ordered skill names in path")
+    path_details: List[SkillDetail] = Field(default_factory=list, description="Full details for each skill")
+    algorithm: str = Field(default="unknown", description="Algorithm used for pathfinding")
+
+
+class SkillCentrality(BaseModel):
+    """Single skill with centrality score."""
+    skill: str = Field(..., description="Skill name")
+    skill_id: str = Field(..., description="Skill ID")
+    score: float = Field(..., ge=0.0, description="Centrality score")
+
+
+class CentralityResponse(BaseModel):
+    """Response for centrality endpoint (/api/network/centrality)."""
+    skills: List[SkillCentrality] = Field(default_factory=list, description="Skills ranked by centrality")
+    total_returned: int = Field(..., ge=0, description="Number of skills returned")
+    algorithm: str = Field(default="eigenvector_gds", description="Algorithm used")
+
+
+class EnhancedJobClosenessRequest(BaseModel):
+    """Request for enhanced job closeness calculation (/api/network/job-closeness)."""
+    user_skills: List[str] = Field(..., min_length=1, description="User's current skills")
+    job_id: Optional[str] = Field(None, description="Specific job ID")
+    job_title: Optional[str] = Field(None, description="Job title to search")
+
+
+class PerSkillCloseness(BaseModel):
+    """Closeness detail for a single required skill."""
+    required_skill: str = Field(..., description="Name of the required skill")
+    closest_user_skill: str = Field(..., description="User skill closest to this requirement")
+    distance: float = Field(..., description="Dijkstra distance (-1 if unreachable)")
+    closeness: float = Field(..., ge=0.0, le=1.0, description="1 / (1 + distance)")
+    path: List[str] = Field(default_factory=list, description="Path from user skill to required")
+    user_already_has: bool = Field(default=False, description="Whether user already has this skill")
+
+
+class EnhancedJobClosenessResponse(BaseModel):
+    """Enhanced response for job closeness calculation with per-skill breakdown."""
+    job_id: Optional[str] = Field(None, description="Job ID if available")
+    job_title: str = Field(..., description="Job title")
+    overall_closeness: float = Field(..., ge=0.0, le=1.0, description="Average closeness across all required skills")
+    per_skill_details: List[PerSkillCloseness] = Field(default_factory=list, description="Breakdown per required skill")
+    skills_already_have: List[str] = Field(default_factory=list, description="User skills matching job requirements")
+    skills_to_learn: List[str] = Field(default_factory=list, description="Job requirements user doesn't have")
+    required_skills_count: int = Field(..., ge=0, description="Total required skills for job")
+    matched_skills_count: int = Field(..., ge=0, description="Skills user already has")
+
+
+class TransitionIndexDirectRequest(BaseModel):
+    """Request for transition index calculation with pre-computed values."""
+    job_closeness: float = Field(..., ge=0, le=1, description="From job-closeness endpoint")
+    core_skill_overlap: float = Field(..., ge=0, le=1, description="% of core skills user has")
+    market_demand: float = Field(..., ge=0, le=1, description="Market demand score (0-1)")
+
+
+class TransitionIndexDirectResponse(BaseModel):
+    """Response for transition index calculation."""
+    transition_index: float = Field(..., ge=0.0, le=1.0, description="Combined heuristic score (0-1)")
+    interpretation: str = Field(..., description="Human-readable assessment")
+    breakdown: Dict[str, float] = Field(..., description="Component contributions")
+    weights: Dict[str, float] = Field(..., description="Formula weights used")
+    note: str = Field(..., description="Disclaimer about heuristic nature")
+
+
+class BuildCooccurrenceResponse(BaseModel):
+    """Response for admin build endpoint (/api/network/build-cooccurrence)."""
+    status: str = Field(..., description="Build status (success/failed)")
+    relationships_created: int = Field(..., ge=0, description="Number of relationships created")
+    relationships_deleted: int = Field(default=0, ge=0, description="Number of relationships deleted")
+    duration_seconds: float = Field(..., ge=0, description="Build duration in seconds")
+    statistics: Dict[str, Any] = Field(default_factory=dict, description="Build statistics")
+    stoplist_stats: Dict[str, Any] = Field(default_factory=dict, description="Stoplist impact statistics")
+
+
+class GDSUnavailableResponse(BaseModel):
+    """Response when GDS is not installed."""
+    available: bool = Field(default=False, description="Always false for this response")
+    message: str = Field(..., description="Explanation of unavailability")
+    suggestion: str = Field(..., description="What user can do")
+
+
+class NetworkCapabilities(BaseModel):
+    """Available network math capabilities based on installed plugins."""
+    gds_available: bool = Field(..., description="Whether GDS is installed")
+    gds_version: Optional[str] = Field(None, description="GDS version if available")
+    apoc_available: bool = Field(..., description="Whether APOC is available")
+    capabilities: Dict[str, bool] = Field(..., description="Feature availability map")
+    fallback_mode: bool = Field(..., description="Using APOC instead of GDS")
+    limited_mode: bool = Field(..., description="Neither GDS nor APOC available")

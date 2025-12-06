@@ -9,6 +9,19 @@ This plan implements ICT-paper-inspired network mathematics into the Career Inte
 
 ---
 
+## Phase Status Overview
+
+| Phase | Name | Status | Document |
+|-------|------|--------|----------|
+| 1 | Data Layer | ✅ QA Approved | `01-DATA-LAYER.md` |
+| 2 | Services Layer | ✅ QA Approved | `02-SERVICES-LAYER.md` |
+| 3 | API Layer | ✅ QA Approved | `03-API-LAYER.md` |
+| 4 | LangGraph Integration | ✅ QA Approved | `04-LANGGRAPH-INTEGRATION.md` |
+| 5 | Testing Strategy | ✅ QA Approved | `05-TESTING-STRATEGY.md` |
+| 6 | Network API Enhancements | 📝 DRAFTED | `07-NETWORK-API-ENHANCEMENTS.md` |
+
+---
+
 ## Mathematical Foundation
 
 ### From ICT Paper to Career Skills Graph
@@ -39,7 +52,10 @@ TransitionIndex: 0.50*AvgCloseness + 0.30*CoreSkillOverlap + 0.20*MarketDemand
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        API Layer                                 │
-│  /api/skills/metrics  /api/skills/transition  /api/skills/path  │
+│  /api/skills/*           /api/network/* (Phase 6)               │
+│  └─ metrics, transition   └─ path, centrality, job-closeness    │
+│     path                     transition-index, capabilities     │
+│                              build-cooccurrence (admin)         │
 └─────────────────────────────────────────────────────────────────┘
                               │
 ┌─────────────────────────────────────────────────────────────────┐
@@ -136,6 +152,32 @@ TransitionIndex: 0.50*AvgCloseness + 0.30*CoreSkillOverlap + 0.20*MarketDemand
 - Performance benchmarks
 - Validation reports
 
+### Phase 6: Network API Enhancements (Day 9-10)
+**Files**: `07-NETWORK-API-ENHANCEMENTS.md`
+**Status**: 📝 DRAFTED - Pending Approval
+
+1. Generic Skills Stoplist - Filter hyper-common skills from co-occurrence
+2. New `/api/network/*` API namespace with dedicated endpoints
+3. Enhanced Job Closeness - Per-skill breakdown with paths
+4. Admin Build Endpoint - Trigger co-occurrence rebuilds
+5. GDS Graceful Fallback - Proper handling when GDS unavailable
+6. Toy Graph Tests - Mathematical correctness validation
+
+**Deliverables**:
+- `NETWORK_GENERIC_SKILLS_STOPLIST` configuration
+- `/api/network/*` router with 6 new endpoints
+- Enhanced `calculate_job_closeness()` with per-skill details
+- GDS availability checking and graceful fallback
+- Toy graph integration tests
+
+**New Endpoints**:
+- `POST /api/network/build-cooccurrence` (admin)
+- `GET /api/network/path?from=X&to=Y`
+- `GET /api/network/centrality?topK=N`
+- `POST /api/network/job-closeness`
+- `POST /api/network/transition-index`
+- `GET /api/network/capabilities`
+
 ---
 
 ## File Structure
@@ -144,27 +186,36 @@ TransitionIndex: 0.50*AvgCloseness + 0.30*CoreSkillOverlap + 0.20*MarketDemand
 backend/
 ├── app/
 │   ├── services/
-│   │   ├── network_metrics_service.py      # NEW: Core network math
-│   │   ├── co_occurrence_builder.py        # NEW: Build CO_OCCURS_WITH
+│   │   ├── network_metrics_service.py      # Phase 2: Core network math
+│   │   ├── co_occurrence_builder.py        # Phase 1: Build CO_OCCURS_WITH
 │   │   ├── skill_similarity_service.py     # EXISTING: Semantic SIMILAR_TO
 │   │   └── ...
 │   ├── api/
-│   │   ├── skills.py                       # NEW: Skill metrics endpoints
+│   │   ├── skills.py                       # Phase 3: Skill metrics endpoints
+│   │   ├── network.py                      # Phase 6: Network API namespace
 │   │   └── ...
 │   ├── agents/nodes/
-│   │   ├── query_understanding.py          # UPDATE: Add TRANSITION_PATH
-│   │   ├── graph_traversal.py              # UPDATE: Add path queries
-│   │   └── context_construction.py         # UPDATE: Format network metrics
+│   │   ├── query_understanding.py          # Phase 4: Add TRANSITION_PATH
+│   │   ├── graph_traversal.py              # Phase 4: Add path queries
+│   │   └── context_construction.py         # Phase 4: Format network metrics
 │   ├── models/
-│   │   ├── network_metrics.py              # NEW: Pydantic models
-│   │   └── intent.py                       # UPDATE: Add new intent
+│   │   ├── network_metrics.py              # Phase 3: Pydantic models
+│   │   ├── network_models.py               # Phase 6: Enhanced Pydantic models
+│   │   └── intent.py                       # Phase 4: Add new intent
 │   └── ...
 ├── scripts/
-│   ├── build_co_occurrence.py              # NEW: Batch builder script
+│   ├── build_co_occurrence.py              # Phase 1: Batch builder script
 │   └── ...
 └── tests/
-    ├── test_network_metrics_service.py     # NEW
-    ├── test_co_occurrence_builder.py       # NEW
+    ├── unit/
+    │   ├── test_network_metrics_service.py # Phase 5
+    │   ├── test_co_occurrence_builder.py   # Phase 5
+    │   ├── test_network_math_correctness.py # Phase 6: Toy graph math tests
+    │   └── ...
+    ├── integration/
+    │   ├── test_network_metrics_neo4j.py   # Phase 5
+    │   ├── test_toy_graph_network.py       # Phase 6: Toy graph integration
+    │   └── ...
     └── ...
 ```
 
@@ -175,16 +226,24 @@ backend/
 ```python
 # config.py additions
 
-# Network Metrics Configuration
+# Network Metrics Configuration (Phase 1-2)
 NETWORK_MIN_CO_OCCURRENCE: int = 2       # Minimum jobs for edge
 NETWORK_DIJKSTRA_TIMEOUT: float = 5.0    # Seconds
 NETWORK_CACHE_TTL: int = 3600            # 1 hour cache
 NETWORK_BATCH_SIZE: int = 1000           # Co-occurrence batch size
 
-# GDS Configuration
+# GDS Configuration (Phase 2)
 GDS_PROJECTION_NAME: str = "skillNetwork"
 GDS_EIGENVECTOR_ITERATIONS: int = 100
 GDS_EIGENVECTOR_TOLERANCE: float = 1e-7
+
+# Phase 6: Network API Enhancements
+NETWORK_GENERIC_SKILLS_STOPLIST: List[str] = [
+    "Communication", "Problem Solving", "Teamwork",
+    "MS Excel", "Microsoft Office", "Leadership", ...
+]
+ALLOW_NETWORK_ADMIN: bool = False        # Admin endpoints protection
+ENVIRONMENT: str = "production"          # development|staging|production
 ```
 
 ---
@@ -233,11 +292,27 @@ GDS_EIGENVECTOR_TOLERANCE: float = 1e-7
 
 ## Next Steps
 
-1. Review and approve this master plan
-2. Proceed to Phase 1: Data Layer implementation
-3. Daily checkpoints to validate progress
+### Completed
+- [x] Phase 1: Data Layer - QA Approved
+- [x] Phase 2: Services Layer - QA Approved
+- [x] Phase 3: API Layer - QA Approved
+- [x] Phase 4: LangGraph Integration - QA Approved
+- [x] Phase 5: Testing Strategy - QA Approved
+
+### Current
+- [ ] **Phase 6: Network API Enhancements** - DRAFTED, awaiting approval
+  - Review `07-NETWORK-API-ENHANCEMENTS.md`
+  - Approve or request changes
+  - Begin development once approved
+
+### Workflow After Approval
+1. Development implementation
+2. Code Review
+3. QA validation
+4. Mark as Done
 
 ---
 
 *Generated: 2025-12-06*
-*Version: 1.0*
+*Updated: 2025-12-06 (Phase 6 added)*
+*Version: 1.1*

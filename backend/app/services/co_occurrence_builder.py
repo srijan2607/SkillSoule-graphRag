@@ -40,6 +40,10 @@ class CoOccurrenceBuilder:
             created_at: DATETIME,
             updated_at: DATETIME
         }]-(:Skill)
+
+    Stoplist Feature:
+        Generic/hyper-common skills (e.g., "Communication", "MS Excel")
+        are excluded from co-occurrence building to improve graph signal quality.
     """
 
     def __init__(self, neo4j_repo: "Neo4jRepository") -> None:
@@ -51,6 +55,20 @@ class CoOccurrenceBuilder:
         """
         self.neo4j_repo = neo4j_repo
         self.min_weight = getattr(settings, 'NETWORK_MIN_CO_OCCURRENCE', 2)
+        self.stoplist = getattr(settings, 'NETWORK_GENERIC_SKILLS_STOPLIST', [])
+        self._stoplist_normalized = {s.lower().strip() for s in self.stoplist}
+
+    def _is_stoplist_skill(self, skill_name: str) -> bool:
+        """
+        Check if skill is in stoplist (case-insensitive).
+
+        Args:
+            skill_name: Name of the skill to check
+
+        Returns:
+            True if skill is in stoplist, False otherwise
+        """
+        return skill_name.lower().strip() in self._stoplist_normalized
 
     async def build_all(self, clear_existing: bool = True) -> Dict[str, Any]:
         """
@@ -118,25 +136,47 @@ class CoOccurrenceBuilder:
 
         Algorithm:
         1. For each Job, find all skill pairs (s1, s2) where id(s1) < id(s2)
-        2. Count distinct jobs requiring both skills
-        3. Create CO_OCCURS_WITH with weight=count, cost=1/count
+        2. Exclude skills in the stoplist
+        3. Count distinct jobs requiring both skills
+        4. Create CO_OCCURS_WITH with weight=count, cost=1/count
         """
         query = """
+        // Get stoplist as parameter for filtering
+        WITH $stoplist AS stoplist
+
         MATCH (j:Job)-[:REQUIRES]->(s1:Skill)
+        WHERE NOT toLower(s1.name) IN stoplist
+
         MATCH (j)-[:REQUIRES]->(s2:Skill)
-        WHERE id(s1) < id(s2)
+        WHERE NOT toLower(s2.name) IN stoplist
+          AND id(s1) < id(s2)
+
         WITH s1, s2, count(DISTINCT j) as weight
         WHERE weight >= $min_weight
-        MERGE (s1)-[r:CO_OCCURS_WITH]-(s2)
+
+        // Use name ordering for consistent direction
+        WITH s1, s2, weight,
+             CASE WHEN s1.name < s2.name THEN s1 ELSE s2 END AS first,
+             CASE WHEN s1.name < s2.name THEN s2 ELSE s1 END AS second
+
+        MERGE (first)-[r:CO_OCCURS_WITH]->(second)
         SET r.weight = weight,
             r.cost = 1.0 / weight,
-            r.created_at = datetime(),
             r.updated_at = datetime()
+        ON CREATE SET r.created_at = datetime()
+
         RETURN count(r) as created
         """
+
+        # Normalize stoplist for Cypher (lowercase)
+        stoplist_lower = [s.lower().strip() for s in self.stoplist]
+
         result = await self.neo4j_repo.execute_query(
             query,
-            {"min_weight": self.min_weight},
+            {
+                "min_weight": self.min_weight,
+                "stoplist": stoplist_lower
+            },
             timeout=300.0  # 5 minute timeout for large graphs
         )
         return result[0]["created"] if result else 0
@@ -322,4 +362,62 @@ class CoOccurrenceBuilder:
             "total_relationships": 0,
             "is_valid": True,
             "issues": []
+        }
+
+    async def get_stoplist_stats(self) -> Dict[str, Any]:
+        """
+        Get statistics about stoplist impact on the graph.
+
+        Returns:
+            Dictionary with stoplist statistics including:
+            - stoplist_size: Number of skills in stoplist config
+            - skills_filtered: Skills actually found in graph that match stoplist
+            - jobs_affected: Jobs that have at least one stoplist skill
+            - total_skills: Total skills in the graph
+            - sample_filtered: Sample of filtered skill names
+        """
+        query = """
+        WITH $stoplist AS stoplist
+
+        // Count skills that match stoplist
+        MATCH (s:Skill)
+        WHERE toLower(s.name) IN stoplist
+        WITH collect(s.name) as stopped_skills, count(s) as stopped_count
+
+        // Count jobs that have stoplist skills
+        OPTIONAL MATCH (j:Job)-[:REQUIRES]->(s:Skill)
+        WHERE toLower(s.name) IN $stoplist
+        WITH stopped_skills, stopped_count, count(DISTINCT j) as jobs_with_stopped
+
+        // Count total skills
+        MATCH (total:Skill)
+        WITH stopped_skills, stopped_count, jobs_with_stopped, count(total) as total_skills
+
+        RETURN stopped_count, jobs_with_stopped, total_skills, stopped_skills
+        """
+
+        stoplist_lower = [s.lower().strip() for s in self.stoplist]
+
+        try:
+            result = await self.neo4j_repo.execute_query(
+                query, {"stoplist": stoplist_lower}
+            )
+
+            if result:
+                return {
+                    "stoplist_size": len(self.stoplist),
+                    "skills_filtered": result[0]["stopped_count"] or 0,
+                    "jobs_affected": result[0]["jobs_with_stopped"] or 0,
+                    "total_skills": result[0]["total_skills"] or 0,
+                    "sample_filtered": (result[0]["stopped_skills"] or [])[:10]
+                }
+        except Exception as e:
+            logger.warning(f"Failed to get stoplist stats: {e}")
+
+        return {
+            "stoplist_size": len(self.stoplist),
+            "skills_filtered": 0,
+            "jobs_affected": 0,
+            "total_skills": 0,
+            "sample_filtered": []
         }

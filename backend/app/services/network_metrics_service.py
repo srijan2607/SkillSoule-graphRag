@@ -67,11 +67,71 @@ class NetworkMetricsService:
             self._gds_available = bool(result)
             if result:
                 logger.info(f"GDS available: version {result[0]['version']}")
+                self._gds_version = result[0]['version']
         except Exception as e:
             logger.warning(f"GDS not available: {e}")
             self._gds_available = False
+            self._gds_version = None
 
         return self._gds_available
+
+    async def check_apoc_available(self) -> bool:
+        """
+        Check if APOC library is installed.
+
+        Returns:
+            True if APOC is available, False otherwise
+        """
+        if hasattr(self, '_apoc_available') and self._apoc_available is not None:
+            return self._apoc_available
+
+        try:
+            query = "RETURN apoc.version() AS version"
+            result = await self.neo4j_repo.execute_query(query, timeout=5.0)
+            self._apoc_available = bool(result)
+            if result:
+                logger.info(f"APOC available: version {result[0]['version']}")
+        except Exception as e:
+            logger.warning(f"APOC not available: {e}")
+            self._apoc_available = False
+
+        return self._apoc_available
+
+    async def get_capabilities(self) -> Dict[str, Any]:
+        """
+        Get available network math capabilities based on installed plugins.
+
+        Returns:
+            NetworkCapabilities-compatible dict with:
+            - gds_available: bool
+            - gds_version: Optional[str]
+            - apoc_available: bool
+            - capabilities: Dict[str, bool]
+            - fallback_mode: bool
+            - limited_mode: bool
+        """
+        gds_available = await self.check_gds_available()
+        apoc_available = await self.check_apoc_available()
+
+        gds_version = getattr(self, '_gds_version', None) if gds_available else None
+
+        # Determine available capabilities
+        capabilities = {
+            "shortest_path": gds_available or apoc_available,
+            "eigenvector_centrality": gds_available,
+            "job_closeness": gds_available or apoc_available,
+            "transition_index": True,  # Always available (computed in Python)
+            "weighted_degree_centrality": True,  # Fallback always available
+        }
+
+        return {
+            "gds_available": gds_available,
+            "gds_version": gds_version,
+            "apoc_available": apoc_available,
+            "capabilities": capabilities,
+            "fallback_mode": not gds_available and apoc_available,
+            "limited_mode": not gds_available and not apoc_available,
+        }
 
     # =========================================================================
     # SHORTEST PATH & DISTANCE
@@ -392,6 +452,195 @@ class NetworkMetricsService:
             "skill_count": len(skill_ids),
             "pair_count": pair_count,
             "skills": skill_ids
+        }
+
+    async def calculate_enhanced_job_closeness(
+        self,
+        user_skills: List[str],
+        job_id: Optional[str] = None,
+        job_title: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Calculate enhanced job closeness with per-skill breakdown.
+
+        For each required skill in the job:
+        - Find minimum distance from any user skill
+        - Calculate closeness = 1 / (1 + min_distance)
+        - Track which user skill provided the closest path
+
+        Formula:
+        JobCloseness(U, J) = average(closeness_req for all req in J)
+
+        Args:
+            user_skills: List of user's current skill names
+            job_id: Optional specific job ID
+            job_title: Optional job title to search
+
+        Returns:
+            {
+                "job_id": str,
+                "job_title": str,
+                "overall_closeness": float,
+                "per_skill_details": [...],
+                "skills_already_have": [...],
+                "skills_to_learn": [...],
+                "required_skills_count": int,
+                "matched_skills_count": int
+            }
+        """
+        # Resolve user skill names to IDs
+        user_skill_query = """
+        MATCH (s:Skill)
+        WHERE toLower(s.name) IN $skill_names
+        RETURN s.id as id, s.name as name
+        """
+        user_skill_names_lower = [s.lower().strip() for s in user_skills]
+        user_skill_result = await self.neo4j_repo.execute_query(
+            user_skill_query,
+            {"skill_names": user_skill_names_lower}
+        )
+
+        user_skill_map = {
+            r["name"].lower(): {"id": r["id"], "name": r["name"]}
+            for r in user_skill_result
+        } if user_skill_result else {}
+
+        user_skill_ids = [v["id"] for v in user_skill_map.values()]
+
+        # Find job by ID or title
+        if job_id:
+            job_query = """
+            MATCH (j:Job {job_id: $job_id})-[:REQUIRES]->(s:Skill)
+            RETURN j.job_id as job_id, j.job_title as job_title,
+                   collect(s.id) as required_skill_ids,
+                   collect(s.name) as required_skill_names
+            """
+            job_result = await self.neo4j_repo.execute_query(
+                job_query,
+                {"job_id": job_id}
+            )
+        elif job_title:
+            job_query = """
+            MATCH (j:Job)-[:REQUIRES]->(s:Skill)
+            WHERE toLower(j.job_title) CONTAINS toLower($job_title)
+            WITH j, collect(s.id) as required_skill_ids, collect(s.name) as required_skill_names
+            RETURN j.job_id as job_id, j.job_title as job_title,
+                   required_skill_ids, required_skill_names
+            LIMIT 1
+            """
+            job_result = await self.neo4j_repo.execute_query(
+                job_query,
+                {"job_title": job_title}
+            )
+        else:
+            raise ValueError("Either job_id or job_title must be provided")
+
+        if not job_result:
+            raise ValueError(f"Job not found: {job_id or job_title}")
+
+        job_data = job_result[0]
+        resolved_job_id = job_data["job_id"]
+        resolved_job_title = job_data["job_title"] or "Unknown"
+        required_skill_ids = job_data["required_skill_ids"] or []
+        required_skill_names = job_data["required_skill_names"] or []
+
+        if not required_skill_ids:
+            return {
+                "job_id": resolved_job_id,
+                "job_title": resolved_job_title,
+                "overall_closeness": 0.0,
+                "per_skill_details": [],
+                "skills_already_have": [],
+                "skills_to_learn": [],
+                "required_skills_count": 0,
+                "matched_skills_count": 0
+            }
+
+        # Build per-skill closeness details
+        per_skill_details = []
+        skills_already_have = []
+        skills_to_learn = []
+        total_closeness = 0.0
+
+        # Create normalized name sets for matching
+        user_skills_lower = {s.lower().strip() for s in user_skills}
+
+        for req_name, req_id in zip(required_skill_names, required_skill_ids):
+            req_name_lower = req_name.lower().strip()
+
+            # Check if user already has this skill
+            if req_name_lower in user_skills_lower:
+                skills_already_have.append(req_name)
+                per_skill_details.append({
+                    "required_skill": req_name,
+                    "closest_user_skill": req_name,
+                    "distance": 0.0,
+                    "closeness": 1.0,
+                    "path": [req_name],
+                    "user_already_has": True
+                })
+                total_closeness += 1.0
+                continue
+
+            skills_to_learn.append(req_name)
+
+            # Find closest user skill
+            if not user_skill_ids:
+                per_skill_details.append({
+                    "required_skill": req_name,
+                    "closest_user_skill": "N/A",
+                    "distance": -1,
+                    "closeness": 0.0,
+                    "path": [],
+                    "user_already_has": False
+                })
+                continue
+
+            # Calculate distance from each user skill to this required skill
+            min_distance = float('inf')
+            closest_user_skill = "N/A"
+            best_path = []
+
+            for user_skill_key, user_skill_data in user_skill_map.items():
+                user_skill_id = user_skill_data["id"]
+                user_skill_name = user_skill_data["name"]
+                path_result = await self.get_shortest_path(user_skill_id, req_id)
+
+                if path_result["path_exists"] and path_result["total_distance"] < min_distance:
+                    min_distance = path_result["total_distance"]
+                    closest_user_skill = user_skill_name
+                    best_path = [
+                        d.get("name", "") for d in path_result.get("path_details", [])
+                    ]
+
+            if min_distance == float('inf'):
+                closeness = 0.0
+                min_distance = -1  # Indicate unreachable
+            else:
+                closeness = 1.0 / (1.0 + min_distance)
+
+            per_skill_details.append({
+                "required_skill": req_name,
+                "closest_user_skill": closest_user_skill,
+                "distance": min_distance,
+                "closeness": closeness,
+                "path": best_path,
+                "user_already_has": False
+            })
+            total_closeness += closeness
+
+        # Calculate overall closeness
+        overall_closeness = total_closeness / len(required_skill_ids) if required_skill_ids else 0.0
+
+        return {
+            "job_id": resolved_job_id,
+            "job_title": resolved_job_title,
+            "overall_closeness": float(overall_closeness),
+            "per_skill_details": per_skill_details,
+            "skills_already_have": skills_already_have,
+            "skills_to_learn": skills_to_learn,
+            "required_skills_count": len(required_skill_ids),
+            "matched_skills_count": len(skills_already_have)
         }
 
     # =========================================================================
