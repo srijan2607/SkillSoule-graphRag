@@ -15,7 +15,6 @@ from app.main import app
 from app.middleware.auth import get_current_user
 from app.dependencies import (
     get_network_metrics_service,
-    get_co_occurrence_builder,
     get_neo4j_repository,
     get_embedding_service,
     get_openrouter_service
@@ -69,7 +68,8 @@ def mock_network_metrics_service():
         "total_distance": 0.2,
         "closeness": 0.83,
         "path": ["skill-a", "skill-b"],
-        "path_details": []
+        "path_details": [],
+        "algorithm": "dijkstra"
     }
     service.calculate_transition_index.return_value = {
         "transition_index": 0.65,
@@ -160,7 +160,7 @@ Our analysis explored 35 nodes and 58 relationships, finding strong correlation 
         }
 
         response = await e2e_client.post(
-            "/api/query/ask",
+            "/query/ask",
             json={
                 "query": "How do I transition from Python developer to Go developer?",
                 "session_id": "test-session-e2e-001"
@@ -209,7 +209,7 @@ To transition from frontend developer to full stack, you need to bridge the foll
         }
 
         response = await e2e_client.post(
-            "/api/query/ask",
+            "/query/ask",
             json={
                 "query": "What's the skill gap between frontend developer and full stack?",
                 "session_id": "test-session-e2e-002"
@@ -257,7 +257,7 @@ This transition is increasingly common in the tech industry. Here's your roadmap
         }
 
         response = await e2e_client.post(
-            "/api/query/ask",
+            "/query/ask",
             json={
                 "query": "How do I become a data scientist from a software developer?",
                 "session_id": "test-session-e2e-003"
@@ -355,7 +355,7 @@ class TestTransitionErrorHandling:
     async def test_empty_query_returns_error(self, e2e_client):
         """Test that empty query returns appropriate error."""
         response = await e2e_client.post(
-            "/api/query/ask",
+            "/query/ask",
             json={
                 "query": "",
                 "session_id": "test-session-error-001"
@@ -427,7 +427,7 @@ class TestConversationFlow:
         }
 
         response1 = await e2e_client.post(
-            "/api/query/ask",
+            "/query/ask",
             json={
                 "query": "How do I transition from Python to Go?",
                 "session_id": "test-conversation-001"
@@ -444,7 +444,7 @@ class TestConversationFlow:
         }
 
         response2 = await e2e_client.post(
-            "/api/query/ask",
+            "/query/ask",
             json={
                 "query": "What resources should I use?",
                 "session_id": "test-conversation-001"  # Same session
@@ -482,7 +482,7 @@ class TestTransitionPerformance:
 
         start = time.perf_counter()
         response = await e2e_client.post(
-            "/api/query/ask",
+            "/query/ask",
             json={
                 "query": "How do I transition careers?",
                 "session_id": "test-perf-001"
@@ -519,7 +519,7 @@ class TestResponseMetadata:
         }
 
         response = await e2e_client.post(
-            "/api/query/ask",
+            "/query/ask",
             json={
                 "query": "Career transition advice?",
                 "session_id": "test-metadata-001"

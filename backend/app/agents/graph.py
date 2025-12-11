@@ -175,7 +175,7 @@ def create_rag_workflow():
     workflow.add_node("vector_search", vector_search_node)
     workflow.add_node("graph_traversal", graph_traversal_node)
     workflow.add_node("transition_metrics", transition_metrics_node)  # Phase 4
-    workflow.add_node("network_enrichment", network_enrichment_node)  # Story 7.4
+    workflow.add_node("enrich_network", network_enrichment_node)  # Story 7.4
     workflow.add_node("construct_context", context_construction_node)
     workflow.add_node("generate_response", response_generation_node)
 
@@ -190,15 +190,15 @@ def create_rag_workflow():
         _should_run_transition_metrics,
         {
             "transition_metrics": "transition_metrics",
-            "network_enrichment": "network_enrichment"  # Story 7.4
+            "network_enrichment": "enrich_network"  # Story 7.4
         }
     )
 
     # Transition metrics flows to network enrichment
-    workflow.add_edge("transition_metrics", "network_enrichment")  # Story 7.4
+    workflow.add_edge("transition_metrics", "enrich_network")  # Story 7.4
 
     # Network enrichment flows to context construction
-    workflow.add_edge("network_enrichment", "construct_context")  # Story 7.4
+    workflow.add_edge("enrich_network", "construct_context")  # Story 7.4
 
     # Continue with response generation
     workflow.add_edge("construct_context", "generate_response")
