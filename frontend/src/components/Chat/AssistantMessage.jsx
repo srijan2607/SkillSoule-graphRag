@@ -2,17 +2,10 @@ import PropTypes from 'prop-types'
 import { Bot, Sparkles } from 'lucide-react'
 import SourceCitations from './SourceCitations'
 import EnhancedResponse from './EnhancedResponse'
+import React, { lazy, Suspense } from 'react'
+
 // Lazy load NetworkInsightsPanel
 const NetworkInsightsPanel = lazy(() => import('./NetworkInsightsPanel'))
-
-// ... inside the component return ...
-
-            {/* Network Insights Panel */}
-            {metadata?.network_insights && (
-              <Suspense fallback={<div className="mt-4 h-32 bg-gray-50 rounded-xl animate-pulse" />}>
-                <NetworkInsightsPanel insights={metadata.network_insights} />
-              </Suspense>
-            )}
 
 /**
  * AssistantMessage component - Beautiful AI assistant messages
@@ -51,7 +44,9 @@ const AssistantMessage = ({ content, timestamp, sources, metadata }) => {
 
             {/* Network Insights Panel */}
             {metadata?.network_insights && (
-              <NetworkInsightsPanel insights={metadata.network_insights} />
+              <Suspense fallback={<div className="mt-4 h-32 bg-gray-50 rounded-xl animate-pulse" />}>
+                <NetworkInsightsPanel insights={metadata.network_insights} />
+              </Suspense>
             )}
             
             {/* Source Citations */}
