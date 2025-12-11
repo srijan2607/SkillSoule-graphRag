@@ -87,7 +87,20 @@ async def context_construction_node(state: GraphRAGState) -> Dict[str, Any]:
             if skill_gap_section:
                 sections.append(skill_gap_section)
 
-        # Section 5: Graph Structure (insights)
+        # Section 5: Transition Path Analysis (Phase 4 - if transition_path intent detected)
+        if "transition_path" in intents:
+            transition_section = _format_transition_context(state, vector_results, graph_context, entities)
+            if transition_section:
+                sections.append(transition_section)
+
+        # Section 6: Network Insights (if available from network enrichment node)
+        network_enrichment = state.metadata.get("network_enrichment")
+        if network_enrichment:
+            network_section = _build_network_insights_section(network_enrichment)
+            if network_section:
+                sections.append(network_section)
+
+        # Section 7: Graph Structure (insights)
         if graph_context or vector_results:
             sections.append(_format_graph_structure_section(graph_context, vector_results, intents))
 
@@ -222,7 +235,8 @@ def _format_user_query_section(
                 "career_path": "planning career transition",
                 "salary_analysis": "researching salary expectations",
                 "company_query": "finding companies and opportunities",
-                "skill_relationship": "comparing related skills"
+                "skill_relationship": "comparing related skills",
+                "transition_path": "analyzing career transition path"
             }
 
             descriptions = [intent_descriptions.get(i, i.replace("_", " ")) for i in relevant_intents]
@@ -463,6 +477,125 @@ def _format_skill_gap_analysis(
     return "\n".join(section)
 
 
+def _format_transition_context(
+    state: "GraphRAGState",
+    vector_results: List[Dict[str, Any]],
+    graph_context: List[Dict[str, Any]],
+    entities: List[Dict[str, Any]],
+) -> str:
+    """
+    Format transition path analysis results for career transitions.
+
+    Phase 4: Displays transition metrics including closeness score,
+    transition index, source/target skills, and gap analysis.
+    """
+    section = ["## Career Transition Analysis\n"]
+
+    # Extract transition-specific fields from state
+    transition_path = getattr(state, 'transition_path', None) if state else None
+    source_skills = getattr(state, 'source_skills', None) if state else None
+    target_skills = getattr(state, 'target_skills', None) if state else None
+    closeness_score = getattr(state, 'closeness_score', None) if state else None
+    transition_index = getattr(state, 'transition_index', None) if state else None
+
+    # Show transition metrics if available (from transition_metrics node)
+    if transition_index is not None:
+        # Format transition index as percentage
+        index_pct = transition_index * 100
+        if index_pct >= 75:
+            emoji = "🟢"
+            assessment = "Highly compatible transition"
+        elif index_pct >= 50:
+            emoji = "🟡"
+            assessment = "Moderate transition effort required"
+        else:
+            emoji = "🔴"
+            assessment = "Significant skill development needed"
+
+        section.append(f"**Transition Index:** {emoji} {index_pct:.1f}% - {assessment}")
+        section.append("")
+
+    if closeness_score is not None:
+        closeness_pct = closeness_score * 100
+        section.append(f"**Skill Closeness:** {closeness_pct:.1f}% (higher = more transferable skills)")
+        section.append("")
+
+    # Show source skills (current skills)
+    if source_skills:
+        section.append(f"**Your Current Skills ({len(source_skills)}):**")
+        for skill in source_skills[:8]:
+            section.append(f"  • {skill}")
+        if len(source_skills) > 8:
+            section.append(f"  _(+{len(source_skills) - 8} more)_")
+        section.append("")
+
+    # Show target skills (required for target role)
+    if target_skills:
+        section.append(f"**Target Role Skills ({len(target_skills)}):**")
+        for skill in target_skills[:8]:
+            section.append(f"  • {skill}")
+        if len(target_skills) > 8:
+            section.append(f"  _(+{len(target_skills) - 8} more)_")
+        section.append("")
+
+    # Calculate and show skill gap
+    if source_skills and target_skills:
+        source_set = set(s.lower() for s in source_skills)
+        target_set = set(s.lower() for s in target_skills)
+        overlap = source_set & target_set
+        gap = target_set - source_set
+
+        if overlap:
+            overlap_pct = (len(overlap) / len(target_set)) * 100
+            section.append(f"**Skill Overlap:** {len(overlap)}/{len(target_set)} ({overlap_pct:.0f}%) - you already have these!")
+
+        if gap:
+            section.append(f"\n**Skills to Develop ({len(gap)}):**")
+            # Get original case from target_skills
+            gap_skills = [s for s in target_skills if s.lower() in gap][:10]
+            for skill in gap_skills:
+                section.append(f"  📚 {skill}")
+            section.append("")
+
+    # Show transition path details if available
+    if transition_path:
+        path_steps = transition_path.get('path', [])
+        if path_steps:
+            section.append("**Recommended Learning Path:**")
+            for i, step in enumerate(path_steps[:5], 1):
+                section.append(f"  {i}. {step}")
+            section.append("")
+
+    # Extract related skills from graph context (CO_OCCURS_WITH relationships)
+    co_occurs_skills = []
+    for ctx in graph_context:
+        if ctx.get("type") == "CO_OCCURS_WITH":
+            weight = ctx.get("properties", {}).get("weight", 0)
+            if weight > 0:
+                co_occurs_skills.append(ctx)
+
+    if co_occurs_skills:
+        section.append(f"**Skill Relationships Found:** {len(co_occurs_skills)} co-occurrence patterns")
+        section.append("_These skills frequently appear together in job postings._")
+        section.append("")
+
+    # If no transition data available yet, provide context from entities
+    if not any([source_skills, target_skills, closeness_score, transition_index]):
+        # Extract from entities
+        skill_entities = [e["value"] for e in entities if e.get("type") == "skill"]
+        role_entities = [e["value"] for e in entities if e.get("type") in ["role", "job"]]
+
+        if skill_entities:
+            section.append(f"**Skills Mentioned:** {', '.join(skill_entities[:5])}")
+        if role_entities:
+            section.append(f"**Target Roles:** {', '.join(role_entities[:3])}")
+
+        if skill_entities or role_entities:
+            section.append("\n💡 *Transition metrics will be calculated based on graph analysis.*")
+
+    return "\n".join(section)
+
+
 def _format_graph_structure_section(
     graph_context: List[Dict[str, Any]], vector_results: List[Dict[str, Any]], intents: List[str]
 ) -> str:
@@ -526,5 +659,99 @@ def _format_graph_structure_section(
         section.append("*Insufficient data for analysis*")
 
     return "\n".join(section)
+
+
+def _build_network_insights_section(enrichment: Dict[str, Any]) -> str:
+    """
+    Build Network Insights section for LLM context.
+
+    Formats network enrichment data from graph analysis including:
+    - Skill bridge paths for career transitions
+    - Top skills ranked by centrality and demand
+    - Similar job opportunities with skill match percentages
+
+    Args:
+        enrichment: Network enrichment data from network_enrichment node
+
+    Returns:
+        Formatted network insights section string
+    """
+    if not enrichment:
+        return ""
+
+    sections = []
+    sections.append("## Network Insights")
+    sections.append("")
+
+    # Skill Bridge Paths
+    if enrichment.get("skill_paths"):
+        sections.append("**Skill Bridge Paths:**")
+        for path in enrichment["skill_paths"][:3]:  # Top 3 paths
+            path_str = " → ".join(path["path"])
+            closeness = path.get("closeness", 0.0)
+            sections.append(f"- {path_str} (closeness: {closeness:.2f})")
+        sections.append("")
+
+    # Top Skills by Importance (centrality + demand)
+    if enrichment.get("top_skills_by_centrality"):
+        sections.append("**Top Skills by Importance:**")
+        for i, skill in enumerate(enrichment["top_skills_by_centrality"][:5], 1):
+            skill_name = skill.get("name", skill.get("skill_name", "Unknown"))
+            centrality = skill.get("centrality", 0.0)
+            demand_count = skill.get("demand_count", 0)
+            sections.append(f"{i}. {skill_name} (centrality: {centrality:.2f}, demand: {demand_count} jobs)")
+        sections.append("")
+
+    # Similar Job Opportunities
+    if enrichment.get("similar_jobs"):
+        sections.append("**Similar Job Opportunities:**")
+        for job in enrichment["similar_jobs"][:5]:  # Top 5 similar jobs
+            job_title = job.get("job_title", "Unknown Position")
+            company = job.get("company")
+            jaccard_score = job.get("jaccard_score", 0.0)
+            match_pct = int(jaccard_score * 100)
+
+            job_line = f"- {job_title}"
+            if company:
+                job_line += f" at {company}"
+            job_line += f" ({match_pct}% skill match)"
+            sections.append(job_line)
+        sections.append("")
+
+    # Transition Feasibility Score (if available)
+    if enrichment.get("transition_feasibility") is not None:
+        feasibility = enrichment["transition_feasibility"]
+        feasibility_pct = int(feasibility * 100)
+
+        # Add emoji based on feasibility
+        if feasibility >= 0.75:
+            emoji = "🟢"
+            assessment = "Highly feasible"
+        elif feasibility >= 0.50:
+            emoji = "🟡"
+            assessment = "Moderately feasible"
+        else:
+            emoji = "🔴"
+            assessment = "Challenging transition"
+
+        sections.append(f"**Career Transition Feasibility:** {emoji} {feasibility_pct}% - {assessment}")
+        sections.append("")
+
+    # Graph Statistics (if available)
+    if enrichment.get("graph_stats"):
+        stats = enrichment["graph_stats"]
+        stats_parts = []
+        if "nodes_analyzed" in stats:
+            stats_parts.append(f"{stats['nodes_analyzed']} nodes analyzed")
+        if "relationships_traversed" in stats:
+            stats_parts.append(f"{stats['relationships_traversed']} relationships")
+        if "avg_centrality" in stats:
+            stats_parts.append(f"avg centrality: {stats['avg_centrality']:.2f}")
+
+        if stats_parts:
+            sections.append(f"_Network analysis: {', '.join(stats_parts)}_")
+            sections.append("")
+
+    return "\n".join(sections)
 
 

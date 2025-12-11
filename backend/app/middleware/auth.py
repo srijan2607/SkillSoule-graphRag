@@ -39,3 +39,7 @@ async def get_current_user(
 
     except Exception as e:
         raise AuthenticationError(f"Authentication failed: {str(e)}")
+
+
+# Alias for clarity in other modules
+get_current_user_id = get_current_user

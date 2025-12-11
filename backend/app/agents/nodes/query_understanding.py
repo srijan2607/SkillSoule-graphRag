@@ -48,6 +48,37 @@ def detect_intents(query: str) -> List[str]:
             r"similar to|related (to|skills)|alternatives to|comparable to|versus|vs\b|compared to",
             "skill_relationship",
         ),
+        # Career transition queries (NEW - Story 7.4)
+        (
+            r"transition\s+from\s+(.+?)\s+to\s+(.+)|"
+            r"switch\s+(?:career|job)\s+(?:from|to)|"
+            r"move\s+from\s+(.+?)\s+(?:to|into)\s+(.+)|"
+            r"become\s+a\s+(.+?)\s+from\s+(.+)",
+            "career_transition",
+        ),
+        # Skill bridge queries (NEW - Story 7.4)
+        (
+            r"path\s+(?:from|between)\s+(.+?)\s+(?:to|and)\s+(.+)|"
+            r"bridge\s+(?:skills?|gap)|"
+            r"connect(?:ion)?\s+(?:from|between)\s+(.+)|"
+            r"skill\s+path",
+            "skill_bridge",
+        ),
+        # Skill importance queries (NEW - Story 7.4)
+        (
+            r"(?:most\s+)?important\s+skills?|"
+            r"top\s+skills?|"
+            r"high(?:est)?\s+(?:demand|centrality)|"
+            r"valuable\s+skills?",
+            "skill_importance",
+        ),
+        # Job similarity queries (NEW - Story 7.4)
+        (
+            r"similar\s+(?:jobs?|positions?|roles?)|"
+            r"related\s+(?:jobs?|positions?)|"
+            r"jobs?\s+like\s+(.+)",
+            "job_similarity",
+        ),
         # Skill requirement queries (EXPANDED to include framework/technology queries)
         (
             r"what skills|skills for|skills needed|skills required|need to know|must know|should.*learn|skills do i need|"
@@ -60,7 +91,7 @@ def detect_intents(query: str) -> List[str]:
         ),
         # Career path queries
         (
-            r"transition|career path|how to become|switch to|move into|get into|roadmap to|become.*developer|become.*engineer",
+            r"career path|how to become|get into|roadmap to|become.*developer|become.*engineer",
             "career_path",
         ),
         # Salary analysis queries (EXPANDED to include "salaries" plural and "how much" queries)

@@ -101,6 +101,21 @@ class DeepIntentAnalyzer:
             r"where.*work",
             r"which.*company",
         ],
+        "transition_path": [
+            r"transition from",
+            r"switch from .* to",
+            r"move from .* to",
+            r"how (do i|can i|to) (become|transition|switch|move)",
+            r"career path from",
+            r"gap between .* and",
+            r"skills gap",
+            r"what skills .* need .* to become",
+            r"bridge .* to",
+            r"from .* to .*",
+            r"skills to learn (for|to)",
+            r"learning path",
+            r"upskill from",
+        ],
     }
 
     # Intent archetypes for Layer 2 (Semantic Analysis)
@@ -190,6 +205,18 @@ class DeepIntentAnalyzer:
                     "Organizations hiring DevOps engineers",
                 ],
                 keywords=["companies", "employers", "organizations", "hire", "work"],
+                confidence_threshold=0.65,
+            ),
+            "transition_path": IntentArchetype(
+                intent_type="transition_path",
+                canonical_queries=[
+                    "How do I transition from backend developer to ML engineer?",
+                    "What skills do I need to switch from Python to Go?",
+                    "Career path from data analyst to data scientist",
+                    "Skills gap between frontend developer and full stack",
+                    "Learning path to become a DevOps engineer from developer",
+                ],
+                keywords=["transition", "switch", "from", "to", "become", "gap", "path"],
                 confidence_threshold=0.65,
             ),
         }

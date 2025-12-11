@@ -64,9 +64,10 @@ describe('AssistantMessage', () => {
 
   it('applies correct styling classes', () => {
     const { container } = render(<AssistantMessage content="Test" />)
-    const messageDiv = container.querySelector('.bg-gray-100')
+    const messageDiv = container.querySelector('.rounded-2xl')
     expect(messageDiv).toBeInTheDocument()
-    expect(messageDiv?.classList.contains('text-gray-900')).toBe(true)
+    // New design uses glassmorphism/inline styles, so we loosen the check or check for shadow
+    expect(messageDiv?.classList.contains('shadow-lg')).toBe(true)
   })
 
   it('integrates SourceCitations below message content', () => {
@@ -77,11 +78,14 @@ describe('AssistantMessage', () => {
       <AssistantMessage content="Test message" sources={sources} />
     )
     
-    const messageContainer = container.querySelector('.bg-gray-100')
+    // Look for the main message container
+    const messageContainer = container.querySelector('.rounded-2xl')
     expect(messageContainer).toBeInTheDocument()
     
-    // SourceCitations should be within the message container
-    const sourceCitations = messageContainer?.querySelector('.source-citations')
-    expect(sourceCitations).toBeInTheDocument()
+    // SourceCitations should be within the message container. 
+    // Note: SourceCitations component might not have a class "source-citations", let's check content integration.
+    expect(screen.getByText(/Based on/)).toBeInTheDocument()
+    // Verify it is inside the container
+    expect(messageContainer?.contains(screen.getByText(/Based on/))).toBe(true)
   })
 })

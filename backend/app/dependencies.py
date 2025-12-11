@@ -15,6 +15,9 @@ from app.services.error_logging_service import ErrorLoggingService
 from app.services.embedding_service import EmbeddingService
 from app.services.batch_processor import BatchProcessor
 from app.services.langgraph_service import LangGraphService
+from app.services.network_metrics_service import NetworkMetricsService
+from app.services.co_occurrence_builder import CoOccurrenceBuilder
+from app.services.openrouter_service import OpenRouterService
 from app.config import settings
 from app.utils.jwt import verify_jwt_token
 from app.models.user import User
@@ -223,3 +226,34 @@ async def get_current_user_optional(
     except Exception:
         # Silently fail for optional authentication
         return None
+
+
+async def get_network_metrics_service() -> NetworkMetricsService:
+    """
+    Get NetworkMetricsService instance.
+
+    Returns:
+        NetworkMetricsService instance with Neo4j repository
+    """
+    repo = await get_neo4j_repository()
+    return NetworkMetricsService(repo)
+
+
+async def get_co_occurrence_builder() -> CoOccurrenceBuilder:
+    """
+    Get CoOccurrenceBuilder instance.
+
+    Returns:
+        CoOccurrenceBuilder instance with Neo4j repository
+    """
+    return CoOccurrenceBuilder(repo)
+
+
+def get_openrouter_service() -> OpenRouterService:
+    """
+    Get OpenRouterService instance.
+
+    Returns:
+        OpenRouterService instance
+    """
+    return OpenRouterService()

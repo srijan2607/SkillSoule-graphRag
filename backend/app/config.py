@@ -7,6 +7,7 @@ Uses pydantic-settings to load and validate configuration from .env file.
 from pydantic_settings import BaseSettings
 from pydantic import field_validator, ValidationError
 from functools import lru_cache
+from typing import List
 import sys
 import logging
 
@@ -71,6 +72,61 @@ class Settings(BaseSettings):
     GRAPH_MAX_RELATIONSHIPS: int = 1000  # Maximum relationships (0 = unlimited)
     GRAPH_CYPHER_LIMIT: int = 500  # LIMIT clause in Cypher queries
     GRAPH_ENABLE_DEEP_TRAVERSAL: bool = True  # Enable comprehensive graph exploration
+
+    # Network Metrics Configuration (for CO_OCCURS_WITH relationships)
+    NETWORK_MIN_CO_OCCURRENCE: int = 2  # Minimum jobs for edge creation
+    NETWORK_DIJKSTRA_TIMEOUT: float = 5.0  # Dijkstra query timeout (seconds)
+    NETWORK_CACHE_TTL: int = 3600  # Centrality cache TTL (seconds)
+    NETWORK_BATCH_SIZE: int = 1000  # Batch size for co-occurrence build
+
+    # Generic Skills Stoplist - excluded from CO_OCCURS_WITH building
+    # These hyper-common skills flatten the graph and reduce signal quality
+    NETWORK_GENERIC_SKILLS_STOPLIST: List[str] = [
+        # Soft Skills (hyper-common)
+        "Communication",
+        "Communication Skills",
+        "Problem Solving",
+        "Problem-Solving",
+        "Teamwork",
+        "Team Work",
+        "Leadership",
+        "Time Management",
+        "Critical Thinking",
+        "Attention to Detail",
+        "Analytical Skills",
+        "Interpersonal Skills",
+        "Work Ethic",
+        "Adaptability",
+        "Collaboration",
+        # Basic Tools (ubiquitous)
+        "Microsoft Office",
+        "MS Office",
+        "Microsoft Excel",
+        "MS Excel",
+        "Excel",
+        "Microsoft Word",
+        "MS Word",
+        "Word",
+        "PowerPoint",
+        "Microsoft PowerPoint",
+        "Outlook",
+        "Google Workspace",
+        "G Suite",
+        # Basic Computer Skills
+        "Computer Skills",
+        "Basic Computer Skills",
+        "Typing",
+        "Email",
+        "Internet",
+    ]
+
+    # Admin endpoint control
+    ALLOW_NETWORK_ADMIN: bool = False  # Set true for dev environments
+
+    # GDS Configuration (if using Neo4j Graph Data Science)
+    GDS_PROJECTION_NAME: str = "skillNetwork"
+    GDS_EIGENVECTOR_ITERATIONS: int = 100
+    GDS_EIGENVECTOR_TOLERANCE: float = 1e-7
 
     # CORS (comma-separated string in .env, parsed to list)
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"

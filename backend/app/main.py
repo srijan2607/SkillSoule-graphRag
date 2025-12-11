@@ -22,7 +22,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
-from app.api import auth, ingest, admin, query, monitor
+from app.api import auth, ingest, admin, query, monitor, skills, network
 from app.exceptions import AuthenticationError
 from app.utils.file_cache import cleanup_expired_files
 from app.middleware.error_handler import (
@@ -282,6 +282,8 @@ app.include_router(ingest.router)
 app.include_router(admin.router)
 app.include_router(query.router)
 app.include_router(monitor.router)
+app.include_router(skills.router)
+app.include_router(network.router)
 
 
 @app.get("/")

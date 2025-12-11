@@ -41,6 +41,9 @@ class GraphRAGState(BaseModel):
     graph_context: Optional[List[Dict[str, Any]]] = Field(
         default=None, description="Results from Neo4j graph traversal (relationships, neighbors)"
     )
+    network_enrichment: Optional[Dict[str, Any]] = Field(
+        default=None, description="Network metrics enrichment (skill paths, centrality, job similarity) - Story 7.4"
+    )
     constructed_context: Optional[str] = Field(
         default=None, description="Formatted context string for LLM prompt"
     )
@@ -58,6 +61,23 @@ class GraphRAGState(BaseModel):
             raise ValueError("user_query cannot be empty")
         return v.strip()
 
+    # Transition-specific fields (Phase 4)
+    transition_path: Optional[Dict[str, Any]] = Field(
+        default=None, description="Transition path analysis results"
+    )
+    source_skills: Optional[List[str]] = Field(
+        default=None, description="Source skill IDs for transition"
+    )
+    target_skills: Optional[List[str]] = Field(
+        default=None, description="Target skill IDs for transition"
+    )
+    closeness_score: Optional[float] = Field(
+        default=None, description="Closeness score for transition path"
+    )
+    transition_index: Optional[float] = Field(
+        default=None, description="Composite transition index score"
+    )
+
     @field_validator("intent")
     @classmethod
     def validate_intent(cls, v: Optional[str]) -> Optional[str]:
@@ -69,6 +89,11 @@ class GraphRAGState(BaseModel):
                 "salary_analysis",
                 "skill_relationship",
                 "company_query",
+                "transition_path",
+                "career_transition",  # NEW - Story 7.4
+                "skill_bridge",  # NEW - Story 7.4
+                "skill_importance",  # NEW - Story 7.4
+                "job_similarity",  # NEW - Story 7.4
                 "general",
                 "unknown",
             ]
@@ -87,6 +112,11 @@ class GraphRAGState(BaseModel):
                 "salary_analysis",
                 "skill_relationship",
                 "company_query",
+                "transition_path",
+                "career_transition",  # NEW - Story 7.4
+                "skill_bridge",  # NEW - Story 7.4
+                "skill_importance",  # NEW - Story 7.4
+                "job_similarity",  # NEW - Story 7.4
                 "general",
                 "unknown",
             ]
@@ -96,9 +126,34 @@ class GraphRAGState(BaseModel):
         return v
 
 
+def _should_run_transition_metrics(state: GraphRAGState) -> str:
+    """
+    Routing function to determine if transition_metrics node should run.
+
+    Args:
+        state: Current graph state
+
+    Returns:
+        "transition_metrics" if transition_path intent detected, else "network_enrichment"
+    """
+    intents = state.intents or [state.intent] if state.intent else []
+    if "transition_path" in intents:
+        return "transition_metrics"
+    return "network_enrichment"
+
+
 def create_rag_workflow():
     """
     Create and compile the GraphRAG workflow.
+
+    Story 7.4 Update: Added network_enrichment node after graph_traversal
+    to provide network metrics (skill paths, centrality, job similarity).
+
+    Flow:
+        understand_query → vector_search → graph_traversal
+            → [if transition_path] → transition_metrics → network_enrichment
+            → [else] → network_enrichment
+        → construct_context → generate_response → END
 
     Returns:
         Compiled StateGraph ready for invocation
@@ -107,6 +162,8 @@ def create_rag_workflow():
     from app.agents.nodes.query_understanding import query_understanding_node
     from app.agents.nodes.vector_search import vector_search_node
     from app.agents.nodes.graph_traversal import graph_traversal_node
+    from app.agents.nodes.transition_metrics import transition_metrics_node
+    from app.agents.nodes.network_enrichment import network_enrichment_node  # Story 7.4
     from app.agents.nodes.context_construction import context_construction_node
     from app.agents.nodes.response_generation import response_generation_node
 
@@ -117,14 +174,33 @@ def create_rag_workflow():
     workflow.add_node("understand_query", query_understanding_node)
     workflow.add_node("vector_search", vector_search_node)
     workflow.add_node("graph_traversal", graph_traversal_node)
+    workflow.add_node("transition_metrics", transition_metrics_node)  # Phase 4
+    workflow.add_node("enrich_network", network_enrichment_node)  # Story 7.4
     workflow.add_node("construct_context", context_construction_node)
     workflow.add_node("generate_response", response_generation_node)
 
-    # Define linear flow
+    # Define flow with conditional routing for transition queries
     workflow.set_entry_point("understand_query")
     workflow.add_edge("understand_query", "vector_search")
     workflow.add_edge("vector_search", "graph_traversal")
-    workflow.add_edge("graph_traversal", "construct_context")
+
+    # Conditional edge - route to transition_metrics or network_enrichment
+    workflow.add_conditional_edges(
+        "graph_traversal",
+        _should_run_transition_metrics,
+        {
+            "transition_metrics": "transition_metrics",
+            "network_enrichment": "enrich_network"  # Story 7.4
+        }
+    )
+
+    # Transition metrics flows to network enrichment
+    workflow.add_edge("transition_metrics", "enrich_network")  # Story 7.4
+
+    # Network enrichment flows to context construction
+    workflow.add_edge("enrich_network", "construct_context")  # Story 7.4
+
+    # Continue with response generation
     workflow.add_edge("construct_context", "generate_response")
     workflow.add_edge("generate_response", END)
 

@@ -147,6 +147,25 @@ def generate_traversal_query(
                 related_skills AS related_skill_node
             LIMIT {cypher_limit}
         """,
+        # Phase 4: Transition path query using CO_OCCURS_WITH for skill proximity
+        "transition_path": f"""
+            MATCH (j:Job) WHERE j.job_id IN $seed_ids
+            MATCH (j)-[req:REQUIRES]->(target_skill:Skill)
+            OPTIONAL MATCH (target_skill)-[co:CO_OCCURS_WITH]-(related_skill:Skill)
+            OPTIONAL MATCH (target_skill)-[:BELONGS_TO_CATEGORY]->(cat:Category)
+            OPTIONAL MATCH (related_skill)-[:BELONGS_TO_CATEGORY]->(related_cat:Category)
+            WITH DISTINCT j, req, target_skill, co, related_skill, cat, related_cat
+            RETURN
+                j AS job_node,
+                req AS requires_rel,
+                target_skill AS skill_node,
+                co AS co_occurs_rel,
+                related_skill AS related_skill_node,
+                cat AS category_node,
+                related_cat AS related_category_node
+            ORDER BY co.weight DESC
+            LIMIT {cypher_limit}
+        """,
     }
 
     return queries.get(intent)
