@@ -278,6 +278,56 @@ class PipelineMonitoringService:
             error=error
         )
 
+    async def emit_network_enrichment(
+        self,
+        session_id: str,
+        user_id: str,
+        query: str,
+        status: StageStatus,
+        duration_ms: Optional[float] = None,
+        skill_paths_count: int = 0,
+        top_skills_count: int = 0,
+        similar_jobs_count: int = 0,
+        has_transition_metrics: bool = False,
+        enrichment_intents: Optional[List[str]] = None,
+        error: Optional[str] = None
+    ) -> None:
+        """
+        Emit network enrichment stage event (Story 7.4).
+
+        Args:
+            session_id: Session ID
+            user_id: User ID
+            query: User query
+            status: Stage status
+            duration_ms: Execution time
+            skill_paths_count: Number of skill paths computed
+            top_skills_count: Number of top skills retrieved
+            similar_jobs_count: Number of similar jobs found
+            has_transition_metrics: Whether transition metrics were calculated
+            enrichment_intents: Intents processed (e.g., ["skill_bridge", "skill_importance"])
+            error: Error message if failed
+        """
+        results = {
+            "skill_paths_count": skill_paths_count,
+            "top_skills_count": top_skills_count,
+            "similar_jobs_count": similar_jobs_count,
+            "has_transition_metrics": has_transition_metrics,
+            "enrichment_intents": enrichment_intents or []
+        }
+
+        await self.emit_stage_event(
+            stage=PipelineStage.GRAPH_TRAVERSAL,  # Using existing stage enum for now
+            status=status,
+            session_id=session_id,
+            user_id=user_id,
+            query=query,
+            duration_ms=duration_ms,
+            results=results,
+            error=error,
+            metadata={"enrichment_type": "network_metrics"}
+        )
+
     async def emit_context_construction(
         self,
         session_id: str,

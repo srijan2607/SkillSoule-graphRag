@@ -41,6 +41,9 @@ class GraphRAGState(BaseModel):
     graph_context: Optional[List[Dict[str, Any]]] = Field(
         default=None, description="Results from Neo4j graph traversal (relationships, neighbors)"
     )
+    network_enrichment: Optional[Dict[str, Any]] = Field(
+        default=None, description="Network metrics enrichment (skill paths, centrality, job similarity) - Story 7.4"
+    )
     constructed_context: Optional[str] = Field(
         default=None, description="Formatted context string for LLM prompt"
     )
@@ -87,6 +90,10 @@ class GraphRAGState(BaseModel):
                 "skill_relationship",
                 "company_query",
                 "transition_path",
+                "career_transition",  # NEW - Story 7.4
+                "skill_bridge",  # NEW - Story 7.4
+                "skill_importance",  # NEW - Story 7.4
+                "job_similarity",  # NEW - Story 7.4
                 "general",
                 "unknown",
             ]
@@ -106,6 +113,10 @@ class GraphRAGState(BaseModel):
                 "skill_relationship",
                 "company_query",
                 "transition_path",
+                "career_transition",  # NEW - Story 7.4
+                "skill_bridge",  # NEW - Story 7.4
+                "skill_importance",  # NEW - Story 7.4
+                "job_similarity",  # NEW - Story 7.4
                 "general",
                 "unknown",
             ]
@@ -123,26 +134,26 @@ def _should_run_transition_metrics(state: GraphRAGState) -> str:
         state: Current graph state
 
     Returns:
-        "transition_metrics" if transition_path intent detected, else "construct_context"
+        "transition_metrics" if transition_path intent detected, else "network_enrichment"
     """
     intents = state.intents or [state.intent] if state.intent else []
     if "transition_path" in intents:
         return "transition_metrics"
-    return "construct_context"
+    return "network_enrichment"
 
 
 def create_rag_workflow():
     """
     Create and compile the GraphRAG workflow.
 
-    Phase 4 Update: Added conditional routing for transition_path queries
-    to run transition_metrics node before context construction.
+    Story 7.4 Update: Added network_enrichment node after graph_traversal
+    to provide network metrics (skill paths, centrality, job similarity).
 
     Flow:
         understand_query → vector_search → graph_traversal
-            → [if transition_path] → transition_metrics → construct_context
-            → [else] → construct_context
-        → generate_response → END
+            → [if transition_path] → transition_metrics → network_enrichment
+            → [else] → network_enrichment
+        → construct_context → generate_response → END
 
     Returns:
         Compiled StateGraph ready for invocation
@@ -152,6 +163,7 @@ def create_rag_workflow():
     from app.agents.nodes.vector_search import vector_search_node
     from app.agents.nodes.graph_traversal import graph_traversal_node
     from app.agents.nodes.transition_metrics import transition_metrics_node
+    from app.agents.nodes.network_enrichment import network_enrichment_node  # Story 7.4
     from app.agents.nodes.context_construction import context_construction_node
     from app.agents.nodes.response_generation import response_generation_node
 
@@ -163,6 +175,7 @@ def create_rag_workflow():
     workflow.add_node("vector_search", vector_search_node)
     workflow.add_node("graph_traversal", graph_traversal_node)
     workflow.add_node("transition_metrics", transition_metrics_node)  # Phase 4
+    workflow.add_node("network_enrichment", network_enrichment_node)  # Story 7.4
     workflow.add_node("construct_context", context_construction_node)
     workflow.add_node("generate_response", response_generation_node)
 
@@ -171,18 +184,21 @@ def create_rag_workflow():
     workflow.add_edge("understand_query", "vector_search")
     workflow.add_edge("vector_search", "graph_traversal")
 
-    # Phase 4: Conditional edge - route to transition_metrics or construct_context
+    # Conditional edge - route to transition_metrics or network_enrichment
     workflow.add_conditional_edges(
         "graph_traversal",
         _should_run_transition_metrics,
         {
             "transition_metrics": "transition_metrics",
-            "construct_context": "construct_context"
+            "network_enrichment": "network_enrichment"  # Story 7.4
         }
     )
 
-    # Transition metrics always flows to context construction
-    workflow.add_edge("transition_metrics", "construct_context")
+    # Transition metrics flows to network enrichment
+    workflow.add_edge("transition_metrics", "network_enrichment")  # Story 7.4
+
+    # Network enrichment flows to context construction
+    workflow.add_edge("network_enrichment", "construct_context")  # Story 7.4
 
     # Continue with response generation
     workflow.add_edge("construct_context", "generate_response")

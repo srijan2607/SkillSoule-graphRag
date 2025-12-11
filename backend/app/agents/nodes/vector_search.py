@@ -14,6 +14,33 @@ from app.services.pipeline_monitoring_service import (
 )
 
 
+def calculate_hybrid_score(node: Dict[str, Any], vector_score: float, max_demand: int = 1) -> float:
+    """
+    Calculate hybrid score combining vector similarity, centrality, and demand.
+
+    Formula: hybrid_score = 0.5 * vector_score + 0.3 * centrality + 0.2 * demand_normalized
+
+    Args:
+        node: Node data with properties (centrality, demand_count, etc.)
+        vector_score: Cosine similarity score from vector search (0.0 - 1.0)
+        max_demand: Maximum demand count for normalization
+
+    Returns:
+        Hybrid score (0.0 - 1.0)
+    """
+    # Extract centrality (default to 0.0 if not present)
+    centrality = node.get("centrality", 0.0)
+
+    # Extract demand count and normalize (default to 0 if not present)
+    demand_count = node.get("demand_count", 0)
+    demand_normalized = demand_count / max_demand if max_demand > 0 else 0.0
+
+    # Calculate weighted hybrid score
+    hybrid_score = (0.5 * vector_score) + (0.3 * centrality) + (0.2 * demand_normalized)
+
+    return hybrid_score
+
+
 async def vector_search_node(state: GraphRAGState) -> Dict[str, Any]:
     """
     Perform vector similarity search in Neo4j.
@@ -110,8 +137,25 @@ async def vector_search_node(state: GraphRAGState) -> Dict[str, Any]:
             all_results.extend(jobs_results)
             all_results.extend(companies_results)
 
-            # Sort by similarity score descending and take top-k
-            all_results.sort(key=lambda x: x.get("score", 0), reverse=True)
+            # Apply hybrid scoring (combining vector similarity, centrality, and demand)
+            if all_results:
+                # Calculate max demand for normalization
+                max_demand = max((r.get("demand_count", 0) for r in all_results), default=1)
+
+                # Calculate hybrid score for each result
+                for result in all_results:
+                    vector_score = result.get("score", 0.0)  # Original vector similarity score
+                    hybrid_score = calculate_hybrid_score(result, vector_score, max_demand)
+                    result["hybrid_score"] = hybrid_score
+                    result["vector_score"] = vector_score  # Preserve original for debugging
+
+                logger.info(
+                    f"[VectorSearch] Applied hybrid scoring (max_demand={max_demand}, "
+                    f"formula: 0.5*vector + 0.3*centrality + 0.2*demand)"
+                )
+
+            # Sort by hybrid score descending and take top-k
+            all_results.sort(key=lambda x: x.get("hybrid_score", x.get("score", 0)), reverse=True)
             vector_results = all_results[:k]
 
             logger.info(

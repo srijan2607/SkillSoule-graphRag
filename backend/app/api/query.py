@@ -8,7 +8,14 @@ from datetime import datetime
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from app.models.query import QueryRequest, QueryResponse
+from app.models.query import (
+    QueryRequest,
+    QueryResponse,
+    NetworkInsights,
+    SkillPathResult,
+    SimilarJobResult,
+    TopSkillResult,
+)
 from app.services.langgraph_service import LangGraphService
 from app.repositories.query_history_repository import QueryHistoryRepository
 from app.middleware.auth import get_current_user
@@ -150,6 +157,29 @@ async def ask_question(
         constructed_context = result.get("constructed_context", "")
         context_stats = result.get("context_stats", {})
 
+        # Extract and transform network_enrichment to NetworkInsights
+        network_insights = None
+        network_enrichment = metadata.get("network_enrichment")
+        if network_enrichment:
+            try:
+                network_insights = NetworkInsights(
+                    skill_paths=[
+                        SkillPathResult(**path) for path in network_enrichment.get("skill_paths", [])
+                    ],
+                    similar_jobs=[
+                        SimilarJobResult(**job) for job in network_enrichment.get("similar_jobs", [])
+                    ],
+                    top_skills=[
+                        TopSkillResult(**skill) for skill in network_enrichment.get("top_skills_by_centrality", [])
+                    ],
+                    transition_feasibility=network_enrichment.get("transition_feasibility"),
+                    graph_stats=network_enrichment.get("graph_stats"),
+                )
+                logger.info(f"[QueryAPI] Network insights included in response")
+            except Exception as insights_error:
+                logger.warning(f"[QueryAPI] Failed to transform network insights: {str(insights_error)}")
+                # Continue without network insights if transformation fails
+
         # Get processing time from metrics (more accurate than simple timer)
         processing_time_ms = result.get("processing_time_ms", (time() - start_time) * 1000)
 
@@ -191,7 +221,8 @@ async def ask_question(
             processing_time_ms=processing_time_ms,
             metadata=metadata,
             constructed_context=constructed_context,
-            context_stats=context_stats
+            context_stats=context_stats,
+            network_insights=network_insights
         )
 
     except HTTPException:

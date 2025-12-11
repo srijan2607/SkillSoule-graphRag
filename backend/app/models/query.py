@@ -4,6 +4,60 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 
 
+class SkillPathResult(BaseModel):
+    """Result of skill path calculation."""
+
+    from_skill: str = Field(..., description="Starting skill in the path")
+    to_skill: str = Field(..., description="Target skill in the path")
+    path: List[str] = Field(..., description="Ordered list of skills in the path")
+    total_cost: float = Field(..., description="Sum of edge costs in the path")
+    closeness: float = Field(..., description="Closeness metric: 1 / (1 + total_cost)")
+
+
+class SimilarJobResult(BaseModel):
+    """Result of job similarity lookup."""
+
+    job_id: str = Field(..., description="Unique job identifier")
+    job_title: str = Field(..., description="Job title")
+    company: Optional[str] = Field(None, description="Company name")
+    jaccard_score: float = Field(..., description="Jaccard similarity score (0.0 - 1.0)")
+    shared_skills: List[str] = Field(default_factory=list, description="Skills shared with query context")
+
+
+class TopSkillResult(BaseModel):
+    """Skill ranked by importance metrics."""
+
+    skill_name: str = Field(..., description="Skill name")
+    canonical_name: str = Field(..., description="Canonical skill name")
+    centrality: float = Field(..., description="Eigenvector centrality (0.0 - 1.0)")
+    demand_count: int = Field(..., description="Number of jobs requiring this skill")
+
+
+class NetworkInsights(BaseModel):
+    """Network-based insights from graph analysis."""
+
+    skill_paths: List[SkillPathResult] = Field(
+        default_factory=list,
+        description="Skill bridge paths for career transitions"
+    )
+    similar_jobs: List[SimilarJobResult] = Field(
+        default_factory=list,
+        description="Similar job opportunities based on skill overlap"
+    )
+    top_skills: List[TopSkillResult] = Field(
+        default_factory=list,
+        description="Top skills ranked by centrality and demand"
+    )
+    transition_feasibility: Optional[float] = Field(
+        None,
+        description="Overall career transition feasibility score (0.0 - 1.0)"
+    )
+    graph_stats: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Graph analysis statistics (nodes, edges, etc.)"
+    )
+
+
 class QueryRequest(BaseModel):
     """Request model for natural language query with validation."""
 
@@ -48,4 +102,8 @@ class QueryResponse(BaseModel):
     context_stats: Optional[Dict[str, Any]] = Field(
         default=None,
         description="Context statistics (token_count, char_count, sections)"
+    )
+    network_insights: Optional[NetworkInsights] = Field(
+        default=None,
+        description="Network-based insights from graph analysis (nullable)"
     )

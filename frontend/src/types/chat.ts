@@ -1,3 +1,5 @@
+import { NetworkInsights } from './query';
+
 /**
  * Message interface for chat messages
  */
@@ -9,6 +11,7 @@ export interface Message {
   sources?: SourceNode[];
   metadata?: MessageMetadata;
   processingTime?: number;
+  network_insights?: NetworkInsights | null;
 }
 
 /**

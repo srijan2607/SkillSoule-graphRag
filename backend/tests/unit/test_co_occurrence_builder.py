@@ -511,6 +511,91 @@ class TestValidateData:
 
 
 @pytest.mark.unit
+class TestEdgeCases:
+    """Test edge cases for co-occurrence building."""
+
+    @pytest.mark.asyncio
+    async def test_update_for_job_empty_job_no_skills(self, co_occurrence_builder, mock_neo4j_repo):
+        """Test update_for_job() handles job with no skills (empty job)."""
+        # Job exists but has no REQUIRES relationships - returns 0 updates
+        mock_neo4j_repo.execute_query.return_value = [{"updated": 0}]
+
+        result = await co_occurrence_builder.update_for_job("job_with_no_skills")
+
+        assert result["relationships_updated"] == 0
+        # Verify query was executed with correct job_id
+        call_args = mock_neo4j_repo.execute_query.call_args
+        params = call_args[0][1]
+        assert params["job_id"] == "job_with_no_skills"
+
+    @pytest.mark.asyncio
+    async def test_update_for_job_single_skill_job(self, co_occurrence_builder, mock_neo4j_repo):
+        """Test update_for_job() handles job with only one skill (no pairs possible)."""
+        # Job has only one skill, so id(s1) < id(s2) constraint can't be satisfied
+        # Result should be 0 co-occurrences
+        mock_neo4j_repo.execute_query.return_value = [{"updated": 0}]
+
+        result = await co_occurrence_builder.update_for_job("job_single_skill")
+
+        assert result["relationships_updated"] == 0
+
+    @pytest.mark.asyncio
+    async def test_build_all_empty_graph_no_jobs(self, co_occurrence_builder, mock_neo4j_repo):
+        """Test build_all() handles graph with no jobs gracefully."""
+        mock_neo4j_repo.execute_query.side_effect = [
+            [{"deleted": 0}],  # _clear_existing - no existing relationships
+            [{"created": 0}],  # _compute_and_create - no jobs to process
+            [{"total_relationships": None, "avg_weight": None,
+              "min_weight": None, "max_weight": None}]  # get_statistics - empty stats
+        ]
+
+        result = await co_occurrence_builder.build_all()
+
+        assert result["status"] == "success"
+        assert result["relationships_deleted"] == 0
+        assert result["relationships_created"] == 0
+        assert result["total_co_occurrence_relationships"] == 0
+
+    @pytest.mark.asyncio
+    async def test_build_all_all_single_skill_jobs(self, co_occurrence_builder, mock_neo4j_repo):
+        """Test build_all() when all jobs have only single skills (no pairs)."""
+        mock_neo4j_repo.execute_query.side_effect = [
+            [{"deleted": 0}],  # _clear_existing
+            [{"created": 0}],  # _compute_and_create - no pairs found
+            [{"total_relationships": 0, "avg_weight": None,
+              "min_weight": None, "max_weight": None}]  # get_statistics
+        ]
+
+        result = await co_occurrence_builder.build_all()
+
+        assert result["status"] == "success"
+        assert result["relationships_created"] == 0
+
+    @pytest.mark.asyncio
+    async def test_stoplist_filtering_excludes_generic_skills(self, mock_neo4j_repo):
+        """Test that stoplist skills are properly excluded from co-occurrence."""
+        with patch('app.services.co_occurrence_builder.settings') as mock_settings:
+            mock_settings.NETWORK_MIN_CO_OCCURRENCE = 2
+            mock_settings.NETWORK_GENERIC_SKILLS_STOPLIST = [
+                "Communication", "Teamwork", "MS Excel"
+            ]
+            builder = CoOccurrenceBuilder(mock_neo4j_repo)
+
+            # Verify stoplist is normalized
+            assert builder._is_stoplist_skill("communication")
+            assert builder._is_stoplist_skill("COMMUNICATION")
+            assert builder._is_stoplist_skill("Communication")
+            assert builder._is_stoplist_skill("teamwork")
+            assert builder._is_stoplist_skill("MS Excel")
+            assert builder._is_stoplist_skill("ms excel")
+
+            # Non-stoplist skills should pass
+            assert not builder._is_stoplist_skill("Python")
+            assert not builder._is_stoplist_skill("JavaScript")
+            assert not builder._is_stoplist_skill("Django")
+
+
+@pytest.mark.unit
 class TestCypherQueryCorrectness:
     """Test Cypher query correctness per spec."""
 

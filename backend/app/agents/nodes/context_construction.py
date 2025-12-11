@@ -93,7 +93,14 @@ async def context_construction_node(state: GraphRAGState) -> Dict[str, Any]:
             if transition_section:
                 sections.append(transition_section)
 
-        # Section 6: Graph Structure (insights)
+        # Section 6: Network Insights (if available from network enrichment node)
+        network_enrichment = state.metadata.get("network_enrichment")
+        if network_enrichment:
+            network_section = _build_network_insights_section(network_enrichment)
+            if network_section:
+                sections.append(network_section)
+
+        # Section 7: Graph Structure (insights)
         if graph_context or vector_results:
             sections.append(_format_graph_structure_section(graph_context, vector_results, intents))
 
@@ -652,5 +659,99 @@ def _format_graph_structure_section(
         section.append("*Insufficient data for analysis*")
 
     return "\n".join(section)
+
+
+def _build_network_insights_section(enrichment: Dict[str, Any]) -> str:
+    """
+    Build Network Insights section for LLM context.
+
+    Formats network enrichment data from graph analysis including:
+    - Skill bridge paths for career transitions
+    - Top skills ranked by centrality and demand
+    - Similar job opportunities with skill match percentages
+
+    Args:
+        enrichment: Network enrichment data from network_enrichment node
+
+    Returns:
+        Formatted network insights section string
+    """
+    if not enrichment:
+        return ""
+
+    sections = []
+    sections.append("## Network Insights")
+    sections.append("")
+
+    # Skill Bridge Paths
+    if enrichment.get("skill_paths"):
+        sections.append("**Skill Bridge Paths:**")
+        for path in enrichment["skill_paths"][:3]:  # Top 3 paths
+            path_str = " → ".join(path["path"])
+            closeness = path.get("closeness", 0.0)
+            sections.append(f"- {path_str} (closeness: {closeness:.2f})")
+        sections.append("")
+
+    # Top Skills by Importance (centrality + demand)
+    if enrichment.get("top_skills_by_centrality"):
+        sections.append("**Top Skills by Importance:**")
+        for i, skill in enumerate(enrichment["top_skills_by_centrality"][:5], 1):
+            skill_name = skill.get("name", skill.get("skill_name", "Unknown"))
+            centrality = skill.get("centrality", 0.0)
+            demand_count = skill.get("demand_count", 0)
+            sections.append(f"{i}. {skill_name} (centrality: {centrality:.2f}, demand: {demand_count} jobs)")
+        sections.append("")
+
+    # Similar Job Opportunities
+    if enrichment.get("similar_jobs"):
+        sections.append("**Similar Job Opportunities:**")
+        for job in enrichment["similar_jobs"][:5]:  # Top 5 similar jobs
+            job_title = job.get("job_title", "Unknown Position")
+            company = job.get("company")
+            jaccard_score = job.get("jaccard_score", 0.0)
+            match_pct = int(jaccard_score * 100)
+
+            job_line = f"- {job_title}"
+            if company:
+                job_line += f" at {company}"
+            job_line += f" ({match_pct}% skill match)"
+            sections.append(job_line)
+        sections.append("")
+
+    # Transition Feasibility Score (if available)
+    if enrichment.get("transition_feasibility") is not None:
+        feasibility = enrichment["transition_feasibility"]
+        feasibility_pct = int(feasibility * 100)
+
+        # Add emoji based on feasibility
+        if feasibility >= 0.75:
+            emoji = "🟢"
+            assessment = "Highly feasible"
+        elif feasibility >= 0.50:
+            emoji = "🟡"
+            assessment = "Moderately feasible"
+        else:
+            emoji = "🔴"
+            assessment = "Challenging transition"
+
+        sections.append(f"**Career Transition Feasibility:** {emoji} {feasibility_pct}% - {assessment}")
+        sections.append("")
+
+    # Graph Statistics (if available)
+    if enrichment.get("graph_stats"):
+        stats = enrichment["graph_stats"]
+        stats_parts = []
+        if "nodes_analyzed" in stats:
+            stats_parts.append(f"{stats['nodes_analyzed']} nodes analyzed")
+        if "relationships_traversed" in stats:
+            stats_parts.append(f"{stats['relationships_traversed']} relationships")
+        if "avg_centrality" in stats:
+            stats_parts.append(f"avg centrality: {stats['avg_centrality']:.2f}")
+
+        if stats_parts:
+            sections.append(f"_Network analysis: {', '.join(stats_parts)}_")
+            sections.append("")
+
+    return "\n".join(sections)
 
 
